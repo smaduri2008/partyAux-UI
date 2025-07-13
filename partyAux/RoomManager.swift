@@ -6,19 +6,27 @@
 //
 
 import Foundation
+import SocketIO
 
 class RoomManager: ObservableObject{
     
     private let userData: UserAuth
     @Published var downvotes: Int = 5
+    @Published var roomCode: String = ""
+    
+    private var manager: SocketManager
+    private var socket : SocketIOClient
+    
     
     init(userData: UserAuth) {
         self.userData = userData
+        manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
+        socket = manager.defaultSocket
     }
     
     func createRoom()
     {
-        var url = userData.url + "/create-room"
+        let url = userData.url + "/create-room"
         guard let urlRequest = URL(string: url) else {return}
         var request = URLRequest(url: urlRequest)
         request.httpMethod = "POST"
@@ -43,5 +51,48 @@ class RoomManager: ObservableObject{
             }
         }.resume()
                 
+    }
+    
+    func connect()
+    {
+        socket.connect()
+    }
+    
+    func disconnect()
+    {
+        socket.disconnect()
+    }
+    
+    
+    func joinRoom()
+    {
+        var body: [String: Any] = ["room": roomCode, "jwt": userData.jwt] //can directly pass a dictionary to a socket endpoint
+        socket.emit("join_room", body)
+    }
+    
+    func leaveRoom()
+    {
+        var body: [String: Any] = ["jwt": userData.jwt]
+        socket.emit("leave_room", body)
+    }
+    
+    func eventHandlers()
+    {
+        socket.on(clientEvent: .connect) {data, ack in
+            print("connected")
+        }
+        socket.on(clientEvent: .disconnect){data, ack in
+            print("disconnected")
+        }
+        
+        socket.on("server_message"){ data, ack in
+            if let message = data.first as? [String: Any],
+            let msg = message["message"] as? String{
+                print(msg)
+            }
+            
+        }
+        
+        
     }
 }

@@ -15,7 +15,7 @@ struct OTPView: View {
                     .font(.headline)
 
                 ZStack {
-                    TextField("", text: $auth.otp) 
+                    TextField("", text: $auth.otp)
                         .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
                         .foregroundColor(.clear)
