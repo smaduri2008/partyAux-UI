@@ -19,8 +19,7 @@ struct YouTubePlayerView: UIViewRepresentable {
                     playerInstance = uiView
                 }
         uiView.load(withVideoId: videoID, playerVars: playerVars)
-       
-        
+
     }
     
    

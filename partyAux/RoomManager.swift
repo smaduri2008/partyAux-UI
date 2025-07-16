@@ -10,9 +10,10 @@ import SocketIO
 
 class RoomManager: ObservableObject{
     
-    private let userData: UserAuth
+    @Published var userData: UserAuth
     @Published var downvotes: Int = 5
-    @Published var roomCode: String = ""
+    @Published var roomCode: String = "006998"
+    @Published var currentSong: Song = Song(from: [:])
     
     private var manager: SocketManager
     private var socket : SocketIOClient
@@ -22,6 +23,7 @@ class RoomManager: ObservableObject{
         self.userData = userData
         manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
         socket = manager.defaultSocket
+        print("RoomManager initialized")
     }
     
     func createRoom()
@@ -63,23 +65,27 @@ class RoomManager: ObservableObject{
         socket.disconnect()
     }
     
+
     
     func joinRoom()
     {
-        var body: [String: Any] = ["room": roomCode, "jwt": userData.jwt] //can directly pass a dictionary to a socket endpoint
+        var body: [String: Any] = ["room": roomCode, "jwt": userData.jwt ?? ""] //can directly pass a dictionary to a socket endpoint
         socket.emit("join_room", body)
     }
+     
     
     func leaveRoom()
     {
         var body: [String: Any] = ["jwt": userData.jwt]
         socket.emit("leave_room", body)
     }
-    
+        
     func eventHandlers()
     {
+        print("test")
         socket.on(clientEvent: .connect) {data, ack in
             print("connected")
+            self.joinRoom()
         }
         socket.on(clientEvent: .disconnect){data, ack in
             print("disconnected")
@@ -88,10 +94,25 @@ class RoomManager: ObservableObject{
         socket.on("server_message"){ data, ack in
             if let message = data.first as? [String: Any],
             let msg = message["message"] as? String{
-                print(msg)
+                print("server_message \(msg)")
             }
             
         }
+        
+        socket.on("add_song") { data, ack in
+            print("song changed")
+            if let payload = data.first as? [String: Any],
+               let songDict = payload["song"] as? [String: Any] {
+                DispatchQueue.main.async {
+                    self.currentSong = Song(from: songDict)
+                }
+            }
+        }
+        
+        socket.onAny { event in
+            print("Got event: \(event.event), data: \(event.items)")
+        }
+
         
         
     }
