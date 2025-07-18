@@ -14,6 +14,7 @@ class RoomManager: ObservableObject{
     @Published var downvotes: Int = 5
     @Published var roomCode: String = "006998"
     @Published var currentSong: Song = Song(from: [:])
+    @Published var joinedRoom: Bool = false
     
     private var manager: SocketManager
     private var socket : SocketIOClient
@@ -38,13 +39,15 @@ class RoomManager: ObservableObject{
         URLSession.shared.dataTask(with: request) { data, response, error in
             guard let data = data,
                   let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let status = response["status"] as? String else {
+                  let status = response["status"] as? String,
+                  let code = response["code"] as? String else {
                 print("could not join room)")
                 return
             }
             DispatchQueue.main.async {
                 if status == "Room created successfully"{
                     print("room created")
+                    self.roomCode = code
                 }
                 else
                 {
@@ -58,6 +61,7 @@ class RoomManager: ObservableObject{
     func connect()
     {
         socket.connect()
+        
     }
     
     func disconnect()
@@ -71,6 +75,9 @@ class RoomManager: ObservableObject{
     {
         var body: [String: Any] = ["room": roomCode, "jwt": userData.jwt ?? ""] //can directly pass a dictionary to a socket endpoint
         socket.emit("join_room", body)
+        print("joined room")
+        self.joinedRoom = true
+        
     }
      
     

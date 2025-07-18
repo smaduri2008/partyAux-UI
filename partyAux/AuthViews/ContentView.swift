@@ -8,33 +8,45 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject var auth = UserAuth()
-
+    @StateObject private var auth = UserAuth()
+    @StateObject private var roomManager: RoomManager
+    @State private var youtubePlayer: YTPlayerView?
+    
+    init() {
+        let authInstance = UserAuth()
+        _auth = StateObject(wrappedValue: authInstance)
+        _roomManager = StateObject(wrappedValue: RoomManager(userData: authInstance))
+    }
     
     var body: some View {
-        NavigationView{
+        NavigationView {
             if auth.authenticated {
-                //Text("you are authenticated")
-                var roomManager = RoomManager(userData: self.auth)
-                var queueManager = QueueManager(jwt_auth: auth.jwt ?? "", room: "006998")
-                @State var youtubePlayer: YTPlayerView?
-                VStack{
-                    MusicPlayerView(
-                        youtubePlayer: youtubePlayer,
-                        queueManager: queueManager,
-                        roomManager: roomManager
-                    )
+                VStack {
+                    if !roomManager.joinedRoom{
+                        RoomCreateJoinView()
+                            .environmentObject(roomManager)
+                    }
+                    
+                    if roomManager.joinedRoom {
+                        let queueManager = QueueManager(jwt_auth: auth.jwt ?? "", room: roomManager.roomCode)
+                        
+                        MusicPlayerView(
+                            youtubePlayer: youtubePlayer,
+                            queueManager: queueManager,
+                            roomManager: roomManager
+                        )
+                    }
                 }
-                
             }
-            else if auth.needsUser{
+            else if auth.needsUser {
                 CreateUsernameView()
             }
-            else{
+            else {
                 EmailView()
             }
         }
         .environmentObject(auth)
+
     }
 }
 
