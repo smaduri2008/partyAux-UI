@@ -180,10 +180,10 @@ struct SearchView: View {
 
     private func addToLocalQueue(song: [String: Any]) {
         if !queuedSongs.contains(where: { $0["url"] as? String == song["url"] as? String }) {
+            // Only add to server queue, don't manually update local queue
+            // The fetchQueue call in addSongsToQueue will update the queue properly
             addSongsToQueue(song: song)
-            queueManager.queue[song["url"] as! String] = song as? AnyHashable
-            //queuedSongs.append(song)
-            print("✅ Added to local queue: \(song["title"] ?? "Untitled")")
+            print("✅ Added to server queue: \(song["title"] ?? "Untitled")")
         } else {
             print("⚠️ Song already in local queue")
         }
@@ -230,6 +230,11 @@ struct SearchView: View {
         request.httpBody = data
 
         URLSession.shared.dataTask(with: request) { data, response, error in
+            // Fetch the updated queue from server instead of manually updating
+            queueManager.fetchQueue {
+                print("Queue refreshed after adding song: \(queueManager.queue.count) songs")
+            }
+            
             if let error = error {
                 print("error: \(error.localizedDescription)")
                 return
@@ -243,10 +248,8 @@ struct SearchView: View {
             if let raw = String(data: data, encoding: .utf8) {
                 print("response: \(raw)")
             }
-
         }.resume()
     }
-
 }
 
 #Preview {

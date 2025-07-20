@@ -22,14 +22,12 @@ struct ContentView: View {
         NavigationView {
             if auth.authenticated {
                 VStack {
-                    if !roomManager.joinedRoom{
+                    if !roomManager.joinedRoom {
                         RoomCreateJoinView()
                             .environmentObject(roomManager)
                     }
                     
-                    if roomManager.joinedRoom {
-                        let queueManager = QueueManager(jwt_auth: auth.jwt ?? "", room: roomManager.roomCode)
-                        
+                    if roomManager.joinedRoom, let queueManager = roomManager.queueManager {
                         MusicPlayerView(
                             youtubePlayer: youtubePlayer,
                             queueManager: queueManager,
@@ -46,7 +44,6 @@ struct ContentView: View {
             }
         }
         .environmentObject(auth)
-
     }
 }
 

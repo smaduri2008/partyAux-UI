@@ -34,17 +34,27 @@ import SwiftUI
 import AVFoundation
 
 struct MusicPlayerView: View {
-    @State private var playerReady = false
-    @State public var currentVideoID = ""
-    @State public var youtubePlayer: YTPlayerView?
-    @State public var queueManager = QueueManager(jwt_auth: "", room: "")
-    @State private var albumArtURL: URL? = nil
-    @State private var isSearching = false
-    @State private var isQueueVisible = false
+        @State private var playerReady = false
+        @State public var currentVideoID = ""
+        @State public var youtubePlayer: YTPlayerView?
+        
+        // Remove this line - don't create a new QueueManager
+        // @State public var queueManager = QueueManager(jwt_auth: "", room: "")
+        
+        // Instead, receive it as a parameter and observe it
+        @ObservedObject var queueManager: QueueManager
+        
+        @State private var albumArtURL: URL? = nil
+        @State private var isSearching = false
+        @State private var isQueueVisible = false
+        @State private var isPlaying = true
+        @State private var songCurrentlyPlaying = false  // Move it here
 
-    @ObservedObject var roomManager: RoomManager
-    
-    @State private var isPlaying = true
+        @ObservedObject var roomManager: RoomManager
+        
+        
+        
+
 
     let playerVars: [String: Any] = [
         "playsinline": 1,
@@ -62,7 +72,6 @@ struct MusicPlayerView: View {
     var body: some View {
         let darkPurple = Color(red: 123/255, green: 97/255, blue: 255/255)
         ZStack {
-            // Search View Overlay
             VStack {
                 if isSearching {
                     HStack {
@@ -89,7 +98,6 @@ struct MusicPlayerView: View {
             .opacity(isSearching ? 1 : 0)
             .animation(.easeInOut, value: isSearching)
             
-            // Queue View Overlay
             VStack {
                 if isQueueVisible {
                     HStack {
@@ -116,7 +124,6 @@ struct MusicPlayerView: View {
             .opacity(isQueueVisible ? 1 : 0)
             .animation(.easeInOut, value: isQueueVisible)
 
-            // Main Player View
             VStack(spacing: 20) {
                 HStack {
                     Text("Room: \(roomManager.roomCode)")
@@ -154,8 +161,9 @@ struct MusicPlayerView: View {
                     videoID: currentVideoID,
                     playerVars: playerVars,
                     playerInstance: $youtubePlayer,
-                    queueManager: $queueManager,
-                    playerReady: $playerReady
+                    queueManager: queueManager,
+                    playerReady: $playerReady,
+                    songCurrentlyPlaying: $songCurrentlyPlaying
                 )
                 .frame(height: 250)
                 .cornerRadius(12)
@@ -187,26 +195,38 @@ struct MusicPlayerView: View {
                     }
                 }
                 //make sure to only update the song if the first song is completed
-                .onChange(of: roomManager.currentSong) { newSong in
-                    print("song is changing in music player")
-                    queueManager.queue[newSong.url] = newSong as? AnyHashable
-                    print("queue \(queueManager.queue)")
-                    if(queueManager.queue.count <= 1)
-                    {
-                        playCurrentSong()
-                    }
-                                                            
-                    // Only play the current song if it's different from what's already playing
-                    /*
-                    if queueManager.queue.count == 1 {
-                     playCurrentSong()
+                .onChange(of: roomManager.currentSong["url"] as? String ?? "") { newVideoID in
+                    print("Current song URL changed: \(newVideoID)")
+                    if !newVideoID.isEmpty && newVideoID != currentVideoID && !songCurrentlyPlaying{
+                        queueManager.currentSong = roomManager.currentSong
+                        print("song changed in onChange")
+                        print("Updating currentVideoID to: \(newVideoID)")
+                        self.currentVideoID = newVideoID
+                        
+                        if let urlString = roomManager.currentSong["album_art"] as? String,
+                           let url = URL(string: urlString) {
+                            self.albumArtURL = url
                         }
-                    
-                     if(newSong.url != queueManager.getCurrentSongID())
-                     {
-                     
-                     }
-                     */
+                        
+                        print("Playing new song with ID: \(newVideoID)")
+                    }
+                }
+                .onChange(of: queueManager.queue) { _ in
+                    print("queue changed")
+                    print("current video id: \(currentVideoID)")
+                    print(songCurrentlyPlaying)
+                    if currentVideoID.isEmpty &&
+                        !songCurrentlyPlaying &&
+                        (roomManager.currentSong["url"] as? String ?? "").isEmpty,
+                       let firstSong = queueManager.queue.first,
+                       let firstID = queueManager.queue.first?.key as? String {
+                        print("queue changed, changing song")
+                        queueManager.currentSong = firstSong.value as! [String : Any]
+                        currentVideoID = firstID
+                    }
+                }
+                .onChange(of: songCurrentlyPlaying) { isPlaying in
+                    print("🎵 songCurrentlyPlaying changed to: \(isPlaying)")
                 }
                 .offset(x: UIScreen.main.bounds.width, y: UIScreen.main.bounds.height)
                 

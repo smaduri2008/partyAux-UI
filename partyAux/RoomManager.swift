@@ -11,9 +11,10 @@ import SocketIO
 class RoomManager: ObservableObject{
     
     @Published var userData: UserAuth
+    @Published var queueManager: QueueManager?
     @Published var downvotes: Int = 5
     @Published var roomCode: String = "006998"
-    @Published var currentSong: Song = Song(from: [:])
+    @Published var currentSong: [String: Any] = [:]
     @Published var joinedRoom: Bool = false
     
     private var manager: SocketManager
@@ -22,9 +23,15 @@ class RoomManager: ObservableObject{
     
     init(userData: UserAuth) {
         self.userData = userData
+        self.queueManager = nil // Initialize as nil, will be created when joining room
         manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
         socket = manager.defaultSocket
         print("RoomManager initialized")
+    }
+    
+    private func createQueueManager() {
+        guard let jwt = userData.jwt else { return }
+        self.queueManager = QueueManager(jwt_auth: jwt, room: roomCode)
     }
     
     func createRoom()
@@ -48,6 +55,8 @@ class RoomManager: ObservableObject{
                 if status == "Room created successfully"{
                     print("room created")
                     self.roomCode = code
+                    // Create QueueManager after room is created
+                    self.createQueueManager()
                 }
                 else
                 {
@@ -61,15 +70,12 @@ class RoomManager: ObservableObject{
     func connect()
     {
         socket.connect()
-        
     }
     
     func disconnect()
     {
         socket.disconnect()
     }
-    
-
     
     func joinRoom()
     {
@@ -78,6 +84,13 @@ class RoomManager: ObservableObject{
         print("joined room")
         self.joinedRoom = true
         
+        // Create QueueManager when joining room
+        self.createQueueManager()
+    }
+    
+    func joinRoom(code: String) {
+        self.roomCode = code
+        joinRoom()
     }
      
     
@@ -85,6 +98,11 @@ class RoomManager: ObservableObject{
     {
         var body: [String: Any] = ["jwt": userData.jwt]
         socket.emit("leave_room", body)
+        
+        // Clean up when leaving room
+        self.joinedRoom = false
+        self.queueManager = nil
+        self.currentSong = [:]
     }
         
     func eventHandlers()
@@ -103,24 +121,64 @@ class RoomManager: ObservableObject{
             let msg = message["message"] as? String{
                 print("server_message \(msg)")
             }
-            
         }
         
-        socket.on("add_song") { data, ack in
-            print("song changed")
+        socket.on("current_song"){ data, ack in
+            print("Current song changed from server")
             if let payload = data.first as? [String: Any],
                let songDict = payload["song"] as? [String: Any] {
                 DispatchQueue.main.async {
-                    self.currentSong = Song(from: songDict)
+                    self.queueManager?.fetchQueue {
+                        print("Queue refreshed after head song deletion")
+                    }
+                    self.currentSong = songDict
+                    self.queueManager?.currentSong = songDict
+                    print("Updated current song: \(songDict)")
                 }
+            }
+        }
+        
+        socket.on("delete_head_song") { data, ack in
+            print("Head song deleted from queue")
+            self.queueManager?.fetchQueue {
+                print("Queue refreshed after head song deletion")
+            }
+        }
+        
+        socket.on("add_song") { data, ack in
+            print("song added to queue")
+            //self.queueManager?.fetchQueue {
+                print("updating queue after song addition")
+                if let payload = data.first as? [String: Any],
+                   let songDict = payload["song"] as? [String: Any] {
+                    if self.currentSong.isEmpty {
+                        DispatchQueue.main.async {
+                            self.currentSong = songDict
+                            self.queueManager?.currentSong = songDict
+                        }
+                    }
+                }
+            //}
+        }
+        
+        socket.on("remove_song") { data, ack in
+            print("song removed from queue")
+            self.queueManager?.fetchQueue {
+                print("updating queue after song removal")
+            }
+        }
+        
+        socket.on("downvote") { data, ack in
+            print("Song downvoted")
+            if let payload = data.first as? [String: Any],
+               let songDict = payload["song"] as? [String: Any],
+               let downvotes = payload["downvotes"] as? Int {
+                print("Song \(songDict) now has \(downvotes) downvotes")
             }
         }
         
         socket.onAny { event in
             print("Got event: \(event.event), data: \(event.items)")
         }
-
-        
-        
     }
 }

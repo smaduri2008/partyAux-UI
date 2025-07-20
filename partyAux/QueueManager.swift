@@ -4,7 +4,9 @@ import UIKit
 class QueueManager: ObservableObject {
     @Published var currentSong: [String: Any] = [:]
     @Published var queue: [String: AnyHashable] = [:]
-    @Published var queueOrder: [String] = [] // Add this to maintain order
+    @Published var queueOrder: [String] = []
+    
+    @Published var songCurrentlyPlaying: Bool = false
     
     var jwt_auth: String
     var room: String

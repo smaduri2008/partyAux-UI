@@ -12,6 +12,7 @@ struct QueueView: View {
                     .fontWeight(.bold)
                 Spacer()
                 
+                /*
                 // Add refresh button like in SearchView
                 Button(action: {
                     queueManager.fetchQueue {
@@ -22,6 +23,7 @@ struct QueueView: View {
                         .font(.title2)
                         .foregroundColor(.white)
                 }
+                 */
             }
             .padding()
 

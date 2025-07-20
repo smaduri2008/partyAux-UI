@@ -4,9 +4,9 @@ struct YouTubePlayerView: UIViewRepresentable {
     var videoID: String
     let playerVars: [String: Any]
     @Binding var playerInstance: YTPlayerView?
-    @Binding var queueManager: QueueManager
-
+    @ObservedObject var queueManager: QueueManager
     @Binding var playerReady: Bool
+    @Binding var songCurrentlyPlaying: Bool
     
     func makeUIView(context: Context) -> YTPlayerView {
         let playerView = YTPlayerView()
@@ -16,22 +16,22 @@ struct YouTubePlayerView: UIViewRepresentable {
     
     func updateUIView(_ uiView: YTPlayerView, context: Context) {
         DispatchQueue.main.async {
-                    playerInstance = uiView
-                }
-        uiView.load(withVideoId: videoID, playerVars: playerVars)
-
+            playerInstance = uiView
+        }
+        
+        if context.coordinator.currentVideoID != videoID {
+            context.coordinator.currentVideoID = videoID
+            uiView.load(withVideoId: videoID, playerVars: playerVars)
+        }
     }
-    
-   
     
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
     
-    
-    
     class Coordinator: NSObject, YTPlayerViewDelegate {
         var parent: YouTubePlayerView
+        var currentVideoID: String = "" 
         
         init(_ parent: YouTubePlayerView) {
             self.parent = parent
@@ -43,39 +43,52 @@ struct YouTubePlayerView: UIViewRepresentable {
         }
         
         func playerView(_ playerView: YTPlayerView, didChangeTo state: YTPlayerState) {
-            switch state {
-            case .playing:
-                print("✅ Video is playing")
-            case .paused:
-                print("⏸️ Video paused")
-                if self.parent.queueManager.isInBackground
-                {
-                    playerView.playVideo()
-                }
-            case .ended:
-               
+            DispatchQueue.main.async {
+                switch state {
+                case .playing:
+                    print("✅ Video is playing")
+                    self.parent.songCurrentlyPlaying = true
+                    
+                case .paused:
+                    print("⏸️ Video paused")
+                    self.parent.songCurrentlyPlaying = true
+                    
+                    if self.parent.queueManager.isInBackground {
+                        playerView.playVideo()
+                    }
+                    
+                case .ended:
                     print("🏁 Video ended")
-                self.parent.queueManager.currentSong = [:]
-                self.parent.videoID = ""
+                    self.parent.songCurrentlyPlaying = false
+                    
+                    self.parent.queueManager.currentSong = [:]
                     self.parent.queueManager.nextSong {
                         print("Song Skip Attempted")
                     }
-                
-                
-            case .buffering:
-                print("⏳ Video buffering")
-            case .cued:
-                print("📋 Video cued")
-            case .unstarted:
-                print("⭕ Video unstarted")
-                playerView.playVideo()
-            default:
-                print("❓ Unknown state")
+                    
+                case .buffering:
+                    print("⏳ Video buffering")
+                    self.parent.songCurrentlyPlaying = true
+                    
+                case .cued:
+                    print("📋 Video cued")
+                    self.parent.songCurrentlyPlaying = false
+                    
+                case .unstarted:
+                    print("⭕ Video unstarted")
+                    self.parent.songCurrentlyPlaying = false
+                    playerView.playVideo()
+                    
+                default:
+                    print("❓ Unknown state")
+                    self.parent.songCurrentlyPlaying = false
+                }
             }
         }
         
         func playerView(_ playerView: YTPlayerView, receivedError error: YTPlayerError) {
             print("❌ Player error: \(error)")
+            parent.songCurrentlyPlaying = false
         }
     }
 }
