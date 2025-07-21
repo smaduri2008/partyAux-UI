@@ -44,6 +44,9 @@ struct ContentView: View {
             }
         }
         .environmentObject(auth)
+        .onAppear {
+            auth.loadJWT()
+        }
     }
 }
 

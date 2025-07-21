@@ -18,6 +18,11 @@ class UserAuth: ObservableObject{
     @Published var showOTPView: Bool = false
     
     let url = "http://35.208.64.59"
+    let jwtKey = "auth_token"
+    
+    init() {
+        loadJWT()
+    }
     
     
     func sendOTP() //add code to make sure the email is valid -> add animation/feature on front end for that too
@@ -52,6 +57,7 @@ class UserAuth: ObservableObject{
                     let jwt = jsonData["jwt"] as? String else { return }
             DispatchQueue.main.async {
                 self.jwt = jwt
+                self.saveJWT(jwt: jwt)
                 self.checkIfUserExists()
             }
         }.resume()
@@ -112,5 +118,18 @@ class UserAuth: ObservableObject{
             }
         }.resume()
         
+    }
+    
+    func saveJWT(jwt: String) {
+        UserDefaults.standard.set(jwt, forKey: jwtKey)
+    }
+
+        
+
+    func loadJWT() {
+        if let storedJWT = UserDefaults.standard.string(forKey: jwtKey) {
+            self.jwt = storedJWT
+            self.authenticated = true
+        }
     }
 }
