@@ -1,10 +1,3 @@
-//
-//  RoomManager.swift
-//  partyAux
-//
-//  Created by Sahas Maduri on 7/13/25.
-//
-
 import Foundation
 import SocketIO
 
@@ -13,7 +6,7 @@ class RoomManager: ObservableObject{
     @Published var userData: UserAuth
     @Published var queueManager: QueueManager?
     @Published var downvotes: Int = 5
-    @Published var roomCode: String = "006998"
+    @Published var roomCode: String = ""
     @Published var currentSong: [String: Any] = [:]
     @Published var joinedRoom: Bool = false
     
@@ -23,19 +16,28 @@ class RoomManager: ObservableObject{
     
     init(userData: UserAuth) {
         self.userData = userData
-        self.queueManager = nil // Initialize as nil, will be created when joining room
+        self.queueManager = nil
         manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
         socket = manager.defaultSocket
         print("RoomManager initialized")
     }
     
     private func createQueueManager() {
-        guard let jwt = userData.jwt else { return }
+        guard let jwt = userData.jwt else {
+            print("❌ Cannot create QueueManager: JWT is nil")
+            return
+        }
+        
+        guard !roomCode.isEmpty else {
+            print("❌ Cannot create QueueManager: roomCode is empty")
+            return
+        }
+        
+        print("✅ Creating QueueManager with room: '\(roomCode)'")
         self.queueManager = QueueManager(jwt_auth: jwt, room: roomCode)
     }
     
-    func createRoom()
-    {
+    func createRoom() {
         let url = userData.url + "/create-room"
         guard let urlRequest = URL(string: url) else {return}
         var request = URLRequest(url: urlRequest)
@@ -48,137 +50,154 @@ class RoomManager: ObservableObject{
                   let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let status = response["status"] as? String,
                   let code = response["code"] as? String else {
-                print("could not join room)")
+                print("❌ Could not create room")
                 return
             }
+            
             DispatchQueue.main.async {
-                if status == "Room created successfully"{
-                    print("room created")
+                if status == "Room created successfully" {
+                    print("✅ Room created with code: \(code)")
                     self.roomCode = code
-                    // Create QueueManager after room is created
                     self.createQueueManager()
-                }
-                else
-                {
-                    print("room could not be created")
+                    self.connect()
+                    
+                } else {
+                    print("❌ Room could not be created: \(status)")
                 }
             }
         }.resume()
-                
     }
     
-    func connect()
-    {
+    func connect() {
         socket.connect()
     }
     
-    func disconnect()
-    {
+    func disconnect() {
         socket.disconnect()
     }
     
-    func joinRoom()
-    {
-        var body: [String: Any] = ["room": roomCode, "jwt": userData.jwt ?? ""] //can directly pass a dictionary to a socket endpoint
-        socket.emit("join_room", body)
-        print("joined room")
-        self.joinedRoom = true
+    private func joinRoom() {
+        guard !roomCode.isEmpty else {
+            print("❌ Cannot join room: roomCode is empty")
+            return
+        }
         
-        // Create QueueManager when joining room
-        self.createQueueManager()
+        guard let jwt = userData.jwt else {
+            print("❌ Cannot join room: JWT is nil")
+            return
+        }
+        
+        let body: [String: Any] = ["room": roomCode, "jwt": jwt]
+        socket.emit("join_room", body)
+        print("✅ Joining room: \(roomCode)")
+        self.joinedRoom = true
     }
     
-    func joinRoom(code: String) {
+    func joinExistingRoom(code: String) {
+        print("🚪 Joining existing room with code: \(code)")
         self.roomCode = code
-        joinRoom()
+        createQueueManager()
+        connect()
+    
     }
      
-    
-    func leaveRoom()
-    {
-        var body: [String: Any] = ["jwt": userData.jwt]
+    func leaveRoom() {
+        guard let jwt = userData.jwt else { return }
+        
+        let body: [String: Any] = ["jwt": jwt]
         socket.emit("leave_room", body)
         
         // Clean up when leaving room
         self.joinedRoom = false
         self.queueManager = nil
         self.currentSong = [:]
+        self.roomCode = ""
+        
+        // Disconnect socket
+        disconnect()
     }
         
-    func eventHandlers()
-    {
-        print("test")
-        socket.on(clientEvent: .connect) {data, ack in
-            print("connected")
-            self.joinRoom()
-        }
-        socket.on(clientEvent: .disconnect){data, ack in
-            print("disconnected")
-        }
+    func eventHandlers() {
+        print("Setting up event handlers")
         
-        socket.on("server_message"){ data, ack in
-            if let message = data.first as? [String: Any],
-            let msg = message["message"] as? String{
-                print("server_message \(msg)")
+        socket.on(clientEvent: .connect) { data, ack in
+            print("✅ Socket connected")
+            // Automatically join room when connected (if we have a room code)
+            if !self.roomCode.isEmpty {
+                self.joinRoom()
+            } else {
+                print("⚠️ Connected but no room code available")
             }
         }
         
-        socket.on("current_song"){ data, ack in
-            print("Current song changed from server")
+        socket.on(clientEvent: .disconnect) { data, ack in
+            print("❌ Socket disconnected")
+            DispatchQueue.main.async {
+                self.joinedRoom = false
+            }
+        }
+        
+        socket.on("server_message") { data, ack in
+            if let message = data.first as? [String: Any],
+               let msg = message["message"] as? String {
+                print("📨 Server message: \(msg)")
+            }
+        }
+        
+        socket.on("current_song") { data, ack in
+            print("🎵 Current song changed from server")
             if let payload = data.first as? [String: Any],
                let songDict = payload["song"] as? [String: Any] {
                 DispatchQueue.main.async {
                     self.queueManager?.fetchQueue {
-                        print("Queue refreshed after head song deletion")
+                        print("🔄 Queue refreshed after current song change")
                     }
                     self.currentSong = songDict
                     self.queueManager?.currentSong = songDict
-                    print("Updated current song: \(songDict)")
+                    print("✅ Updated current song: \(songDict)")
                 }
             }
         }
         
         socket.on("delete_head_song") { data, ack in
-            print("Head song deleted from queue")
+            print("🗑️ Head song deleted from queue")
             self.queueManager?.fetchQueue {
-                print("Queue refreshed after head song deletion")
+                print("🔄 Queue refreshed after head song deletion")
             }
         }
         
         socket.on("add_song") { data, ack in
-            print("song added to queue")
-            //self.queueManager?.fetchQueue {
-                print("updating queue after song addition")
-                if let payload = data.first as? [String: Any],
-                   let songDict = payload["song"] as? [String: Any] {
-                    if self.currentSong.isEmpty {
-                        DispatchQueue.main.async {
-                            self.currentSong = songDict
-                            self.queueManager?.currentSong = songDict
-                        }
+            print("➕ Song added to queue")
+            if let payload = data.first as? [String: Any],
+               let songDict = payload["song"] as? [String: Any] {
+                if self.currentSong.isEmpty {
+                    DispatchQueue.main.async {
+                        self.currentSong = songDict
+                        self.queueManager?.currentSong = songDict
+                        print("✅ Set as current song since queue was empty")
                     }
                 }
-            //}
+            }
         }
         
         socket.on("remove_song") { data, ack in
-            print("song removed from queue")
+            print("➖ Song removed from queue")
             self.queueManager?.fetchQueue {
-                print("updating queue after song removal")
+                print("🔄 Queue updated after song removal")
             }
         }
         
         socket.on("downvote") { data, ack in
-            print("Song downvoted")
+            print("👎 Song downvoted")
             if let payload = data.first as? [String: Any],
                let songDict = payload["song"] as? [String: Any],
                let downvotes = payload["downvotes"] as? Int {
-                print("Song \(songDict) now has \(downvotes) downvotes")
+                print("📊 Song \(songDict) now has \(downvotes) downvotes")
             }
         }
         
         socket.onAny { event in
-            print("Got event: \(event.event), data: \(event.items)")
+            print("🔍 Socket event: \(event.event), data: \(event.items)")
         }
     }
 }

@@ -6,6 +6,9 @@ struct RoomCreateJoinView: View {
     private let joinCodeLength = 6
     
     @EnvironmentObject var roomManager: RoomManager
+    
+    @State private var isCreatingRoom = false
+    @State private var isJoiningRoom = false
 
     let purpleColor = Color(red: 123/255, green: 97/255, blue: 255/255)
 
@@ -16,18 +19,29 @@ struct RoomCreateJoinView: View {
             VStack(spacing: 40) {
                 VStack {
                     Button(action: {
-                        roomManager.connect()
+                        isCreatingRoom = true
                         roomManager.createRoom()
-                        roomManager.joinRoom()
                     }) {
-                        Text("Create Room")
-                            .font(.headline)
-                            .foregroundColor(.black)
-                            .frame(width: 140, height: 55)
-                            .background(purpleColor)
-                            .cornerRadius(14)
-                            .shadow(color: purpleColor.opacity(0.4), radius: 10)
+                        HStack {
+                            if isCreatingRoom {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .foregroundColor(.black)
+                                Text("Creating...")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                            } else {
+                                Text("Create Room")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                            }
+                        }
+                        .frame(width: 140, height: 55)
+                        .background(isCreatingRoom ? purpleColor.opacity(0.7) : purpleColor)
+                        .cornerRadius(14)
+                        .shadow(color: purpleColor.opacity(0.4), radius: 10)
                     }
+                    .disabled(isCreatingRoom || isJoiningRoom)
                 }
 
                 Rectangle()
@@ -51,7 +65,7 @@ struct RoomCreateJoinView: View {
                                 if newValue.count > joinCodeLength {
                                     joinCode = String(newValue.prefix(joinCodeLength))
                                 }
-                                joinCode = joinCode.uppercased()
+                                joinCode = joinCode.uppercased().filter { $0.isLetter || $0.isNumber }
                             }
 
                         HStack(spacing: 12) {
@@ -73,21 +87,46 @@ struct RoomCreateJoinView: View {
                     }
 
                     Button(action: {
-                        roomManager.roomCode = joinCode
-                        roomManager.connect()
-                        roomManager.joinRoom()
+                        isJoiningRoom = true
+                        roomManager.joinExistingRoom(code: joinCode)
                     }) {
-                        Text("Join Room")
-                            .font(.headline)
-                            .foregroundColor(.black)
-                            .frame(width: 140, height: 50)
-                            .background(purpleColor)
-                            .cornerRadius(14)
-                            .shadow(color: purpleColor.opacity(0.4), radius: 10)
+                        HStack {
+                            if isJoiningRoom {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .foregroundColor(.black)
+                                Text("Joining...")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                            } else {
+                                Text("Join Room")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                            }
+                        }
+                        .frame(width: 140, height: 50)
+                        .background(isJoiningRoom ? purpleColor.opacity(0.7) : purpleColor)
+                        .cornerRadius(14)
+                        .shadow(color: purpleColor.opacity(0.4), radius: 10)
                     }
+                    .disabled(joinCode.count != joinCodeLength || isCreatingRoom || isJoiningRoom)
                 }
             }
             .padding(.horizontal, 40)
+        }
+        .onAppear {
+            roomManager.eventHandlers()
+        }
+        .onChange(of: roomManager.roomCode) { newRoomCode in
+            if !newRoomCode.isEmpty {
+                isCreatingRoom = false
+                isJoiningRoom = false
+            }
+        }
+        .onChange(of: roomManager.joinedRoom) { joined in
+            if joined {
+                isJoiningRoom = false
+            }
         }
     }
 }

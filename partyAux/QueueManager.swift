@@ -73,7 +73,7 @@ class QueueManager: ObservableObject {
 
     func nextSong(completion: @escaping () -> Void) {
         print("jwt: \(self.jwt_auth)")
-        
+        print("room code: \(self.room)")
         QueueManager.sendPostRequest(body: ["jwt": self.jwt_auth, "room": self.room], endpoint: "/next-song") { result in
             if let result = result {
                 DispatchQueue.main.async {
