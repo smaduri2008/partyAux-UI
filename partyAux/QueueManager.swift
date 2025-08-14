@@ -3,7 +3,7 @@ import UIKit
 
 class QueueManager: ObservableObject {
     @Published var currentSong: [String: Any] = [:]
-    @Published var queue: [String: AnyHashable] = [:]
+    @Published var queue: [String: [String:Any]] = [:]
     @Published var queueOrder: [String] = []
     
     @Published var songCurrentlyPlaying: Bool = false
@@ -54,11 +54,12 @@ class QueueManager: ObservableObject {
                     self.queue.removeAll()
                     self.queueOrder.removeAll()
                     
-                    if let songList = result["queue"] as? [[String: AnyHashable]] {
+                    if let songList = result["queue"] as? [[String: Any]] {
                         for song in songList {
-                            let url = song["url"] as? String ?? UUID().uuidString
-                            self.queue[url] = song as AnyHashable
-                            self.queueOrder.append(url) // Maintain order
+                            let uniqueID = UUID().uuidString
+                            //let url = song["url"] as? String ?? UUID().uuidString
+                            self.queue[uniqueID] = song
+                            self.queueOrder.append(uniqueID) // Maintain order
                         }
                     }
                     print("Queue updated with \(self.queue.count) songs")

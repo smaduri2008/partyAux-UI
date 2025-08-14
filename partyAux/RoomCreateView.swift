@@ -38,11 +38,11 @@ struct RoomCreateJoinView: View {
                     
                     // Create Room Section
                     VStack(spacing: 24) {
-                        VStack(spacing: 16) {
+                        HStack(spacing: 16) {
                             ZStack {
                                 Circle()
                                     .fill(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing))
-                                    .frame(width: 60, height: 60)
+                                    .frame(width: 45, height: 45)
                                     .shadow(color: Color.white.opacity(0.3), radius: 10, x: 0, y: 5)
                                 
                                 Image(systemName: "plus")
@@ -142,7 +142,7 @@ struct RoomCreateJoinView: View {
                     
                     // Join Room Section
                     VStack(spacing: 24) {
-                        VStack(spacing: 16) {
+                        HStack(spacing: 16) {
                             ZStack {
                                 Circle()
                                     .fill(Color.appCardBackground)
@@ -150,7 +150,7 @@ struct RoomCreateJoinView: View {
                                         Circle()
                                             .stroke(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing), lineWidth: 2)
                                     )
-                                    .frame(width: 60, height: 60)
+                                    .frame(width: 45, height: 45)
                                 
                                 Image(systemName: "door.right.hand.open")
                                     .font(.system(size: 24, weight: .medium))

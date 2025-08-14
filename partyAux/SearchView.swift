@@ -6,6 +6,7 @@ struct SearchView: View {
     @State private var searchResults: [[String: Any]] = []
     @State private var errorMessage: String? = nil
     @State private var queuedSongs: [[String: Any]] = []
+    @State private var animatedIndex: Int? = nil
     
     @EnvironmentObject var queueManager: QueueManager
     @EnvironmentObject var roomManager: RoomManager
@@ -15,53 +16,69 @@ struct SearchView: View {
         appearance.configureWithOpaqueBackground()
         appearance.backgroundColor = UIColor.black
         appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
-
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            // Title
             HStack {
                 Text("Search")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 Spacer()
             }
-            .padding()
+            .padding(.horizontal)
 
-            TextField("Search YouTube...", text: $searchText)
-                .padding(12)
+            // Search bar + button inline
+            HStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+
+                    TextField("Search YouTube...", text: $searchText)
+                        .foregroundColor(.black) // Text color
+                        .placeholder(when: searchText.isEmpty) {
+                            Text("Search YouTube...")
+                                .foregroundColor(.black.opacity(0.6)) // Black placeholder
+                        }
+                        .autocapitalization(.none)
+                }
+                .padding(10)
                 .background(Color.white)
-                .foregroundColor(Color.black)
                 .cornerRadius(8)
-                .padding(.horizontal)
+                .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
 
-            Button("Search") {
-                performSearch()
+                Button(action: performSearch) {
+                    Image(systemName: "arrow.forward.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : Color.purple)
+                }
+                .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .padding()
-            .background(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.gray : Color(red: 0.4, green: 0.0, blue: 0.6))
-            .foregroundColor(.white)
-            .cornerRadius(10)
+            .padding(.horizontal)
 
+            // Loading indicator
             if isLoading {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     .scaleEffect(1.5)
             }
 
+            // Error
             if let errorMessage = errorMessage {
                 Text(errorMessage)
                     .foregroundColor(.red)
                     .padding(.horizontal)
             }
 
+            // Results
             List {
                 ForEach(searchResults.indices, id: \.self) { index in
                     let item = searchResults[index]
                     HStack(alignment: .center, spacing: 12) {
+                        // Thumbnail
                         if let imageUrlString = item["album_art"] as? String,
                            let imageUrl = URL(string: imageUrlString) {
                             AsyncImage(url: imageUrl) { image in
@@ -81,14 +98,16 @@ struct SearchView: View {
                                 .cornerRadius(8)
                         }
 
+                        // Song info
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item["title"] as? String ?? "No Title")
                                 .font(.headline)
+                                .foregroundColor(.white)
 
                             HStack(spacing: 8) {
                                 Text(item["artist"] as? String ?? "No Artist")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.gray)
 
                                 if let durationStr = item["duration"] as? String {
                                     Text("• \(formatDuration(durationStr))")
@@ -101,25 +120,39 @@ struct SearchView: View {
                         Spacer()
 
                         Button(action: {
+                            // Haptic feedback
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+
+                            // Animation trigger
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                animatedIndex = index
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    animatedIndex = nil
+                                }
+                            }
+
+                            // Add to queue
                             addToLocalQueue(song: item)
                         }) {
                             Image(systemName: "plus.circle.fill")
                                 .resizable()
                                 .frame(width: 24, height: 24)
-                                .foregroundColor(.blue)
+                                .foregroundColor(Color.purple)
                         }
                     }
                     .padding(.vertical, 4)
+                    .listRowBackground(Color.black)
+                    .scaleEffect(animatedIndex == index ? 0.9 : 1.0) // Row animation
                 }
             }
             .listStyle(PlainListStyle())
             .opacity(searchResults.isEmpty && !isLoading ? 0 : 1)
-
-            Spacer()
         }
-        .padding()
+        .padding(.top)
         .background(Color.black.ignoresSafeArea())
-        .foregroundColor(.white)
     }
 
     private func performSearch() {
@@ -180,16 +213,10 @@ struct SearchView: View {
 
     private func addToLocalQueue(song: [String: Any]) {
         if !queuedSongs.contains(where: { $0["url"] as? String == song["url"] as? String }) {
-            // Only add to server queue, don't manually update local queue
-            // The fetchQueue call in addSongsToQueue will update the queue properly
             addSongsToQueue(song: song)
-            print("✅ Added to server queue: \(song["title"] ?? "Untitled")")
-        } else {
-            print("⚠️ Song already in local queue")
         }
     }
 
-    // Parses strings like "2 minutes, 51 seconds" into "2:51"
     private func formatDuration(_ durationString: String) -> String {
         var minutes = 0
         var seconds = 0
@@ -222,38 +249,26 @@ struct SearchView: View {
             "song": song
         ]
         
-        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            print("could not format data")
-            return
-        }
+        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else { return }
         
         request.httpBody = data
 
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            // Fetch the updated queue from server instead of manually updating
-            queueManager.fetchQueue {
-                print("Queue refreshed after adding song: \(queueManager.queue.count) songs")
-            }
-            
-            if let error = error {
-                print("error: \(error.localizedDescription)")
-                return
-            }
-
-            guard let data = data else {
-                print("no data returned")
-                return
-            }
-
-            if let raw = String(data: data, encoding: .utf8) {
-                print("response: \(raw)")
-            }
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            queueManager.fetchQueue { }
         }.resume()
     }
 }
 
-#Preview {
-    NavigationView {
-        SearchView()
+// Custom placeholder modifier so we can set color
+extension View {
+    func placeholder<Content: View>(
+        when shouldShow: Bool,
+        alignment: Alignment = .leading,
+        @ViewBuilder placeholder: () -> Content) -> some View {
+
+        ZStack(alignment: alignment) {
+            placeholder().opacity(shouldShow ? 1 : 0)
+            self
+        }
     }
 }

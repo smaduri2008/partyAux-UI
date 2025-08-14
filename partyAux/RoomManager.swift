@@ -68,6 +68,43 @@ class RoomManager: ObservableObject{
         }.resume()
     }
     
+    func getRoomInfo() {
+        print("ROOMCODE: \(roomCode)")
+        let url = userData.url + "/get-room-info"
+        guard let urlRequest = URL(string: url) else { return }
+        var request = URLRequest(url: urlRequest)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["room": roomCode, "jwt": userData.jwt])
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data else {
+                print("no data returned")
+                return
+            }
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("response: \(json)")
+                
+                if let status = json["status"] as? String {
+                    if status == "Room info retrieved" {
+                        print("room info: \(json["room_info"] ?? "No room_info field")")
+                    } else {
+                        print("server could not get room info: \(status)")
+                    }
+                } else {
+                    print("data was not retreived")
+                }
+            } else {
+                print("failed to parse JSON")
+                if let rawString = String(data: data, encoding: .utf8) {
+                    print("Raw response: \(rawString)")
+                }
+            }
+        }.resume()
+    }
+
+    
     func connect() {
         socket.connect()
     }
@@ -91,6 +128,8 @@ class RoomManager: ObservableObject{
         socket.emit("join_room", body)
         print("✅ Joining room: \(roomCode)")
         self.joinedRoom = true
+        
+        
     }
     
     func joinExistingRoom(code: String) {
@@ -116,6 +155,8 @@ class RoomManager: ObservableObject{
         // Disconnect socket
         disconnect()
     }
+    
+
         
     func eventHandlers() {
         print("Setting up event handlers")
@@ -125,6 +166,7 @@ class RoomManager: ObservableObject{
             // Automatically join room when connected (if we have a room code)
             if !self.roomCode.isEmpty {
                 self.joinRoom()
+                //self.getRoomInfo()
             } else {
                 print("⚠️ Connected but no room code available")
             }
