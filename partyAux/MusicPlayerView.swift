@@ -44,6 +44,7 @@ struct MusicPlayerView: View {
     @State private var albumArtURL: URL? = nil
     @State private var isSearching = false
     @State private var isQueueVisible = false
+    @State private var isMembersVisible = false
     @State private var isPlaying = true
     @State private var songCurrentlyPlaying = false
     @State private var showControls = true
@@ -84,12 +85,13 @@ struct MusicPlayerView: View {
             .zIndex(0)
            
             // Main Player View
-            if !isSearching && !isQueueVisible {
+            if !isSearching && !isQueueVisible && !isMembersVisible {
                 MainPlayerView(
                     albumArtURL: $albumArtURL,
                     isPlaying: $isPlaying,
                     isSearching: $isSearching,
                     isQueueVisible: $isQueueVisible,
+                    isMembersVisible: $isMembersVisible,
                     showControls: $showControls,
                     queueManager: queueManager,
                     roomManager: roomManager,
@@ -127,9 +129,21 @@ struct MusicPlayerView: View {
                     ))
                     .zIndex(2)
             }
+            
+            // Members View Overlay
+            if isMembersVisible {
+                MembersOverlayView(isMembersVisible: $isMembersVisible)
+                    .environmentObject(roomManager)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+                    .zIndex(2)
+            }
         }
         .animation(.springy, value: isSearching)
         .animation(.springy, value: isQueueVisible)
+        .animation(.springy, value: isMembersVisible)
         .onAppear {
             setupPlayer()
         }
@@ -356,12 +370,30 @@ struct QueueOverlayView: View {
     }
 }
 
+/*
+// MARK: - Members Overlay View
+struct MembersOverlayView: View {
+    @Binding var isMembersVisible: Bool
+    @EnvironmentObject var roomManager: RoomManager
+    
+    var body: some View {
+        RoomMembersView(roomManager: roomManager, isVisible: $isMembersVisible)
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
+            .zIndex(2)
+    }
+}
+ */
+
 // MARK: - Main Player View
 struct MainPlayerView: View {
     @Binding var albumArtURL: URL?
     @Binding var isPlaying: Bool
     @Binding var isSearching: Bool
     @Binding var isQueueVisible: Bool
+    @Binding var isMembersVisible: Bool
     @Binding var showControls: Bool
    
     @ObservedObject var queueManager: QueueManager
@@ -377,6 +409,7 @@ struct MainPlayerView: View {
                 roomCode: roomManager.roomCode,
                 isSearching: $isSearching,
                 isQueueVisible: $isQueueVisible,
+                isMembersVisible: $isMembersVisible,
                 roomManager: roomManager
             )
            
@@ -390,9 +423,10 @@ struct MainPlayerView: View {
                 // Song Information
                 SongInfoView(currentSong: queueManager.currentSong)
                
-                // Player Controls
+                // Player Controls - Pass host status
                 PlayerControlsView(
                     isPlaying: isPlaying,
+                    isHost: roomManager.isCurrentUserHost,
                     togglePlayPause: togglePlayPause,
                     onSkip: skipToNext
                 )
@@ -409,22 +443,32 @@ struct TopHeaderView: View {
     let roomCode: String
     @Binding var isSearching: Bool
     @Binding var isQueueVisible: Bool
+    @Binding var isMembersVisible: Bool
     let roomManager: RoomManager
    
     @State private var showLeaveAlert = false
    
     var body: some View {
         HStack {
-            // Room Code Badge
+            // Room Code Badge with Host Indicator
             HStack {
-                Image(systemName: "music.note.house.fill")
+                Image(systemName: roomManager.isCurrentUserHost ? "crown.fill" : "music.note.house.fill")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white)
+                    .foregroundColor(roomManager.isCurrentUserHost ? .yellow : .white)
                
                 Text("Room: \(roomCode)")
                     .font(.callout)
                     .fontWeight(.bold)
                     .foregroundColor(.textPrimary)
+                
+                /*
+                if roomManager.isCurrentUserHost {
+                    Text("(Host)")
+                        .font(.caption2)
+                        .foregroundColor(.yellow)
+                        .fontWeight(.medium)
+                }
+                 */
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -432,21 +476,69 @@ struct TopHeaderView: View {
             .cornerRadius(20)
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
-                    .stroke(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing), lineWidth: 1)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: roomManager.isCurrentUserHost ? [Color.yellow.opacity(0.5)] : [Color.white]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        lineWidth: 1
+                    )
             )
            
             Spacer()
            
             // Action Buttons
             HStack(spacing: 12) {
+                // Members Button - Available to all users
                 Button(action: {
                     // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
-                   
+                    
                     withAnimation(.springy) {
-                        isSearching.toggle()
+                        isMembersVisible.toggle()
                     }
+                }) {
+                    ZStack {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.textPrimary)
+                        
+                        // Member count badge
+                        /*
+                        if roomManager.roomMembers.count > 0 {
+                            Text("\(roomManager.roomMembers.count)")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .frame(width: 16, height: 16)
+                                .background(Color.red)
+                                .cornerRadius(8)
+                                .offset(x: 12, y: -12)
+                        }
+                         */
+                    }
+                    .frame(width: 44, height: 44)
+                    .background(Color.appCardBackground)
+                    .cornerRadius(22)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(Color.appSurface, lineWidth: 1)
+                    )
+                }
+                
+                // Search Button - Only for hosts
+                Button(action: {
+                    //if roomManager.isCurrentUserHost {
+                        // Add haptic feedback
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                       
+                        withAnimation(.springy) {
+                            isSearching.toggle()
+                        }
+                    //}
                 }) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 20, weight: .medium))
@@ -459,7 +551,10 @@ struct TopHeaderView: View {
                                 .stroke(Color.appSurface, lineWidth: 1)
                         )
                 }
+                //.disabled(!roomManager.isCurrentUserHost)
+                //.opacity(roomManager.isCurrentUserHost ? 1.0 : 0.6)
                
+                // Queue Button - Available to all users (view only for non-hosts)
                 Button(action: {
                     // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
@@ -481,7 +576,7 @@ struct TopHeaderView: View {
                         )
                 }
                 
-                // Leave Room Button (moved to header)
+                // Leave Room Button
                 Button(action: {
                     // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -600,53 +695,98 @@ struct SongInfoView: View {
 // MARK: - Player Controls View
 struct PlayerControlsView: View {
     let isPlaying: Bool
+    let isHost: Bool
     let togglePlayPause: () -> Void
     let onSkip: () -> Void
    
     var body: some View {
         VStack(spacing: 24) {
+            // Host Status Indicator (optional)
+            if !isHost {
+                HStack {
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.textTertiary)
+                    Text("Listening Mode - Only the host can control playback")
+                        .font(.caption)
+                        .foregroundColor(.textTertiary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(12)
+            }
+            
             // Main Control Row
             HStack(spacing: 60) {
-                // Main Play/Pause Button
-                Button(action: togglePlayPause) {
-                    ZStack {
-                        Circle()
-                            .fill(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing))
-                            .frame(width: 80, height: 80)
-                            .shadow(color: Color.white.opacity(0.4), radius: 15, x: 0, y: 8)
-                       
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 32, weight: .bold))
-                            .foregroundColor(.black)
-                            .offset(x: isPlaying ? 0 : 2) // Slight offset for play icon visual balance
-                    }
-                    .scaleEffect(1.0)
-                    .animation(.bouncy, value: isPlaying)
-                }
-                
-                // Skip Button
+                // Main Play/Pause Button - Only active for host
                 Button(action: {
-                    // Add haptic feedback
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                   
-                    onSkip()
+                    if isHost {
+                        togglePlayPause()
+                    }
                 }) {
                     ZStack {
                         Circle()
-                            .fill(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing))
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: isHost ? [Color.white] : [Color.white.opacity(0.3)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: 80, height: 80)
+                            .shadow(
+                                color: isHost ? Color.white.opacity(0.4) : Color.clear,
+                                radius: 15,
+                                x: 0,
+                                y: 8
+                            )
+                       
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 32, weight: .bold))
+                            .foregroundColor(isHost ? .black : .gray)
+                            .offset(x: isPlaying ? 0 : 2)
+                    }
+                    .scaleEffect(1.0)
+                    .animation(.bouncy, value: isPlaying)
+                    .opacity(isHost ? 1.0 : 0.6)
+                }
+                .disabled(!isHost)
+                
+                // Skip Button - Only active for host
+                Button(action: {
+                    if isHost {
+                        // Add haptic feedback
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                       
+                        onSkip()
+                    }
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: isHost ? [Color.white] : [Color.white.opacity(0.3)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
                             .frame(width: 80, height: 80)
                             .overlay(
                                 Circle()
                                     .stroke(Color.appSurface, lineWidth: 1)
                             )
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .shadow(
+                                color: isHost ? Color.black.opacity(0.1) : Color.clear,
+                                radius: 8,
+                                x: 0,
+                                y: 4
+                            )
                         
                         Image(systemName: "forward.end.fill")
                             .font(.system(size: 24, weight: .medium))
-                            .foregroundColor(.black)
+                            .foregroundColor(isHost ? .black : .gray)
                     }
+                    .opacity(isHost ? 1.0 : 0.6)
                 }
+                .disabled(!isHost)
             }
         }
         .animation(.smooth, value: isPlaying)

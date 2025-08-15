@@ -9,6 +9,12 @@ class RoomManager: ObservableObject{
     @Published var roomCode: String = ""
     @Published var currentSong: [String: Any] = [:]
     @Published var joinedRoom: Bool = false
+    @Published var roomHost: String = ""
+    
+    @Published var roomMembers: [String] = [] // Array of email addresses
+    @Published var roomMembersUsernames: [String: String] = [:] // Map email to username
+    
+    @Published var isCurrentUserHost: Bool = false
     
     private var manager: SocketManager
     private var socket : SocketIOClient
@@ -20,6 +26,15 @@ class RoomManager: ObservableObject{
         manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
         socket = manager.defaultSocket
         print("RoomManager initialized")
+        
+        //userData.clearUserData()
+        
+        print("ROOMCODE: \(roomCode)")
+        print("EMAIL: \(userData.email)")
+        print("USERNAME: \(userData.username)")
+        print("JWT: \(userData.jwt)")
+        
+        updateHostStatus()
     }
     
     private func createQueueManager() {
@@ -38,72 +53,121 @@ class RoomManager: ObservableObject{
     }
     
     func createRoom() {
-        let url = userData.url + "/create-room"
-        guard let urlRequest = URL(string: url) else {return}
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["jwt": userData.jwt, "max_downvotes": downvotes])
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data,
-                  let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let status = response["status"] as? String,
-                  let code = response["code"] as? String else {
-                print("❌ Could not create room")
-                return
+            let url = userData.url + "/create-room"
+            guard let urlRequest = URL(string: url) else {return}
+            var request = URLRequest(url: urlRequest)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["jwt": userData.jwt, "max_downvotes": downvotes])
+            
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                guard let data = data,
+                      let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let status = response["status"] as? String,
+                      let code = response["code"] as? String else {
+                    print("❌ Could not create room")
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    if status == "Room created successfully" {
+                        print("✅ Room created with code: \(code)")
+                        self.roomCode = code
+                        
+                        // Immediately set host status since we created the room
+                        self.roomHost = self.userData.email
+                        self.isCurrentUserHost = true
+                        print("🎉 Set as host immediately: \(self.userData.email)")
+                        
+                        self.createQueueManager()
+                        self.connect()
+                        
+                    } else {
+                        print("❌ Room could not be created: \(status)")
+                    }
+                }
+            }.resume()
+        }
+    
+    private func updateHostStatus() {
+            let newHostStatus = !roomHost.isEmpty && !userData.email.isEmpty && roomHost == userData.email
+            
+            if newHostStatus != isCurrentUserHost {
+                print("🔄 Host status changing from \(isCurrentUserHost) to \(newHostStatus)")
+                print("   roomHost: '\(roomHost)'")
+                print("   userData.email: '\(userData.email)'")
             }
             
             DispatchQueue.main.async {
-                if status == "Room created successfully" {
-                    print("✅ Room created with code: \(code)")
-                    self.roomCode = code
-                    self.createQueueManager()
-                    self.connect()
-                    
-                } else {
-                    print("❌ Room could not be created: \(status)")
-                }
+                self.isCurrentUserHost = newHostStatus
             }
-        }.resume()
-    }
+        }
     
     func getRoomInfo() {
-        print("ROOMCODE: \(roomCode)")
-        let url = userData.url + "/get-room-info"
-        guard let urlRequest = URL(string: url) else { return }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["room": roomCode, "jwt": userData.jwt])
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data else {
-                print("no data returned")
-                return
-            }
+            print("ROOMCODE: \(roomCode)")
+            print("EMAIL: \(userData.email)")
+            print("USERNAME: \(userData.username)")
+            print("JWT: \(userData.jwt)")
+            let url = userData.url + "/get-room-info"
+            guard let urlRequest = URL(string: url) else { return }
+            var request = URLRequest(url: urlRequest)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["room": roomCode, "jwt": userData.jwt])
             
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                print("response: \(json)")
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                guard let data = data else {
+                    print("no data returned")
+                    return
+                }
                 
-                if let status = json["status"] as? String {
-                    if status == "Room info retrieved" {
-                        print("room info: \(json["room_info"] ?? "No room_info field")")
-                    } else {
-                        print("server could not get room info: \(status)")
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let status = json["status"] as? String {
+                        if status == "Room info retrieved" {
+                            if let roomInfo = json["room_info"] as? [String: Any] {
+                                DispatchQueue.main.async {
+                                    // Parse host information
+                                    if let hostDict = roomInfo["host"] as? [String: Any],
+                                       let hostUser = hostDict["email"] as? String {
+                                        let previousHost = self.roomHost
+                                        self.roomHost = hostUser
+                                        
+                                        // Update host status after setting roomHost
+                                        self.updateHostStatus()
+                                        
+                                        if previousHost != hostUser && !previousHost.isEmpty {
+                                            print("🔄 Host changed from \(previousHost) to \(hostUser)")
+                                            if self.isCurrentUserHost {
+                                                print("🎉 You are now the host!")
+                                            }
+                                        } else {
+                                            print("room host is \(hostUser)")
+                                        }
+                                    }
+                                    
+                                    // Parse users list (rest of your existing code)
+                                    if let usersArray = roomInfo["users"] as? [[String: Any]] {
+                                        var memberEmails: [String] = []
+                                        var emailToUsername: [String: String] = [:]
+                                        
+                                        for userDict in usersArray {
+                                            if let email = userDict["email"] as? String,
+                                               let username = userDict["username"] as? String {
+                                                memberEmails.append(email)
+                                                emailToUsername[email] = username
+                                            }
+                                        }
+                                        
+                                        self.roomMembers = memberEmails
+                                        self.roomMembersUsernames = emailToUsername
+                                    }
+                                }
+                            }
+                        }
                     }
-                } else {
-                    print("data was not retreived")
                 }
-            } else {
-                print("failed to parse JSON")
-                if let rawString = String(data: data, encoding: .utf8) {
-                    print("Raw response: \(rawString)")
-                }
-            }
-        }.resume()
-    }
-
+            }.resume()
+        }
     
     func connect() {
         socket.connect()
@@ -129,15 +193,18 @@ class RoomManager: ObservableObject{
         print("✅ Joining room: \(roomCode)")
         self.joinedRoom = true
         
+        self.getRoomInfo()
         
     }
     
     func joinExistingRoom(code: String) {
         print("🚪 Joining existing room with code: \(code)")
         self.roomCode = code
+        self.roomHost = "" // Reset host status when joining existing room
+        self.isCurrentUserHost = false
         createQueueManager()
         connect()
-    
+        self.getRoomInfo()
     }
      
     func leaveRoom() {
@@ -238,8 +305,26 @@ class RoomManager: ObservableObject{
             }
         }
         
+        socket.on("someone_left") { data, ack in
+                print("👋 Someone left the room")
+                if let payload = data.first as? [String: Any],
+                   let leftEmail = payload["email"] as? String {
+                    
+                    print("User left: \(leftEmail)")
+                    
+                    // If the person who left was the host, refresh room info
+                    if leftEmail == self.roomHost {
+                        print("🔄 Host left, refreshing room info...")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self.getRoomInfo()
+                        }
+                    }
+                }
+            }
+        
         socket.onAny { event in
             print("🔍 Socket event: \(event.event), data: \(event.items)")
+            print("isCurrentUserHost: \(self.isCurrentUserHost)")
         }
     }
 }
