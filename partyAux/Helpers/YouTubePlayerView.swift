@@ -7,6 +7,7 @@ struct YouTubePlayerView: UIViewRepresentable {
     @ObservedObject var queueManager: QueueManager
     @Binding var playerReady: Bool
     @Binding var songCurrentlyPlaying: Bool
+    var onPlayerReady: (() -> Void)? = nil // <-- Add this closure
     
     func makeUIView(context: Context) -> YTPlayerView {
         let playerView = YTPlayerView()
@@ -31,7 +32,7 @@ struct YouTubePlayerView: UIViewRepresentable {
     
     class Coordinator: NSObject, YTPlayerViewDelegate {
         var parent: YouTubePlayerView
-        var currentVideoID: String = "" 
+        var currentVideoID: String = ""
         
         init(_ parent: YouTubePlayerView) {
             self.parent = parent
@@ -40,6 +41,7 @@ struct YouTubePlayerView: UIViewRepresentable {
         func playerViewDidBecomeReady(_ playerView: YTPlayerView) {
             print("Player is ready - autoplay should start")
             parent.playerReady = true
+            parent.onPlayerReady?() // <-- Call closure when ready
         }
         
         func playerView(_ playerView: YTPlayerView, didChangeTo state: YTPlayerState) {
@@ -48,6 +50,7 @@ struct YouTubePlayerView: UIViewRepresentable {
                 case .playing:
                     print("✅ Video is playing")
                     self.parent.songCurrentlyPlaying = true
+                    self.parent.onPlayerReady?() // <-- Call closure when playing
                     
                 case .paused:
                     print("⏸️ Video paused")
