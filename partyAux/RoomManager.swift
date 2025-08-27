@@ -42,11 +42,12 @@ class RoomManager: ObservableObject{
         print("RoomManager initialized")
         
         //userData.clearUserData()
-        
+        /*
         print("ROOMCODE: \(roomCode)")
         print("EMAIL: \(userData.email)")
         print("USERNAME: \(userData.username)")
         print("JWT: \(userData.jwt)")
+         */
         
         updateHostStatus()
     }
@@ -104,18 +105,18 @@ class RoomManager: ObservableObject{
         }
     
     private func updateHostStatus() {
-            let newHostStatus = !roomHost.isEmpty && !userData.email.isEmpty && roomHost == userData.email
+        let newHostStatus = !roomHost.isEmpty && !userData.email.isEmpty && roomHost == userData.email
             
-            if newHostStatus != isCurrentUserHost {
-                print("🔄 Host status changing from \(isCurrentUserHost) to \(newHostStatus)")
-                print("   roomHost: '\(roomHost)'")
-                print("   userData.email: '\(userData.email)'")
-            }
-            
-            DispatchQueue.main.async {
-                self.isCurrentUserHost = newHostStatus
-            }
+        if newHostStatus != isCurrentUserHost {
+            print("🔄 Host status changing from \(isCurrentUserHost) to \(newHostStatus)")
+            print("   roomHost: '\(roomHost)'")
+            print("   userData.email: '\(userData.email)'")
         }
+            
+        DispatchQueue.main.async {
+            self.isCurrentUserHost = newHostStatus
+        }
+    }
     
     func getRoomInfo() {
         print("🔍 Getting room info for room: \(roomCode)")
@@ -165,9 +166,11 @@ class RoomManager: ObservableObject{
                                     for userDict in usersArray {
                                         if let email = userDict["email"] as? String,
                                            let username = userDict["username"] as? String {
-                                            memberEmails.append(email)
-                                            emailToUsername[email] = username
-                                            print("  - \(username) (\(email))")
+                                            //if email != self.roomHost{
+                                                memberEmails.append(email)
+                                                emailToUsername[email] = username
+                                                print("  - \(username) (\(email))")
+                                            //}
                                         }
                                     }
                                     
