@@ -56,8 +56,9 @@ class QueueManager: ObservableObject {
                     
                     if let songList = result["queue"] as? [[String: Any]] {
                         for song in songList {
-                            let uniqueID = UUID().uuidString
+                            let uniqueID = song["uuid"] as? String ?? UUID().uuidString
                             //let url = song["url"] as? String ?? UUID().uuidString
+                            
                             self.queue[uniqueID] = song
                             self.queueOrder.append(uniqueID) // Maintain order
                         }

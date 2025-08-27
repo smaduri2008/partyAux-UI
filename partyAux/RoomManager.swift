@@ -11,8 +11,22 @@ class RoomManager: ObservableObject{
     @Published var joinedRoom: Bool = false
     @Published var roomHost: String = ""
     
-    @Published var roomMembers: [String] = [] // Array of email addresses
-    @Published var roomMembersUsernames: [String: String] = [:] // Map email to username
+    @Published var roomMembers: [String] = [] {
+        didSet {
+            print("🔄 roomMembers updated: \(roomMembers)")
+            DispatchQueue.main.async {
+                self.objectWillChange.send()
+            }
+        }
+    }
+    @Published var roomMembersUsernames: [String: String] = [:] {
+        didSet {
+            print("🔄 roomMembersUsernames updated: \(roomMembersUsernames)")
+            DispatchQueue.main.async {
+                self.objectWillChange.send()
+            }
+        }
+    }
     
     @Published var isCurrentUserHost: Bool = false
     
@@ -104,70 +118,86 @@ class RoomManager: ObservableObject{
         }
     
     func getRoomInfo() {
-            print("ROOMCODE: \(roomCode)")
-            print("EMAIL: \(userData.email)")
-            print("USERNAME: \(userData.username)")
-            print("JWT: \(userData.jwt)")
-            let url = userData.url + "/get-room-info"
-            guard let urlRequest = URL(string: url) else { return }
-            var request = URLRequest(url: urlRequest)
-            request.httpMethod = "POST"
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: ["room": roomCode, "jwt": userData.jwt])
+        print("🔍 Getting room info for room: \(roomCode)")
+        print("📧 Current user: \(userData.email)")
+        
+        let url = userData.url + "/get-room-info"
+        guard let urlRequest = URL(string: url) else { return }
+        var request = URLRequest(url: urlRequest)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["room": roomCode, "jwt": userData.jwt])
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data else {
+                print("❌ No data returned from getRoomInfo")
+                return
+            }
             
-            URLSession.shared.dataTask(with: request) { data, response, error in
-                guard let data = data else {
-                    print("no data returned")
-                    return
-                }
-                
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if let status = json["status"] as? String {
-                        if status == "Room info retrieved" {
-                            if let roomInfo = json["room_info"] as? [String: Any] {
-                                DispatchQueue.main.async {
-                                    // Parse host information
-                                    if let hostDict = roomInfo["host"] as? [String: Any],
-                                       let hostUser = hostDict["email"] as? String {
-                                        let previousHost = self.roomHost
-                                        self.roomHost = hostUser
-                                        
-                                        // Update host status after setting roomHost
-                                        self.updateHostStatus()
-                                        
-                                        if previousHost != hostUser && !previousHost.isEmpty {
-                                            print("🔄 Host changed from \(previousHost) to \(hostUser)")
-                                            if self.isCurrentUserHost {
-                                                print("🎉 You are now the host!")
-                                            }
-                                        } else {
-                                            print("room host is \(hostUser)")
+            // Print the raw response for debugging
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("🔍 Raw room info response: \(jsonString)")
+            }
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let status = json["status"] as? String {
+                    print("📊 Room info status: \(status)")
+                    
+                    if status == "Room info retrieved" {
+                        if let roomInfo = json["room_info"] as? [String: Any] {
+                            DispatchQueue.main.async {
+                                // Parse host information
+                                if let hostDict = roomInfo["host"] as? [String: Any],
+                                   let hostUser = hostDict["email"] as? String {
+                                    let previousHost = self.roomHost
+                                    self.roomHost = hostUser
+                                    self.updateHostStatus()
+                                    print("🏠 Host updated to: \(hostUser)")
+                                }
+                                
+                                // Parse users list
+                                if let usersArray = roomInfo["users"] as? [[String: Any]] {
+                                    var memberEmails: [String] = []
+                                    var emailToUsername: [String: String] = [:]
+                                    
+                                    print("👥 Processing \(usersArray.count) users from server")
+                                    
+                                    for userDict in usersArray {
+                                        if let email = userDict["email"] as? String,
+                                           let username = userDict["username"] as? String {
+                                            memberEmails.append(email)
+                                            emailToUsername[email] = username
+                                            print("  - \(username) (\(email))")
                                         }
                                     }
                                     
-                                    // Parse users list (rest of your existing code)
-                                    if let usersArray = roomInfo["users"] as? [[String: Any]] {
-                                        var memberEmails: [String] = []
-                                        var emailToUsername: [String: String] = [:]
-                                        
-                                        for userDict in usersArray {
-                                            if let email = userDict["email"] as? String,
-                                               let username = userDict["username"] as? String {
-                                                memberEmails.append(email)
-                                                emailToUsername[email] = username
-                                            }
-                                        }
-                                        
-                                        self.roomMembers = memberEmails
-                                        self.roomMembersUsernames = emailToUsername
-                                    }
+                                    print("✅ Setting room members to: \(memberEmails)")
+                                    
+                                    // Force clear and update to ensure SwiftUI detects changes
+                                    self.roomMembers.removeAll()
+                                    self.roomMembersUsernames.removeAll()
+                                    
+                                    self.roomMembers = memberEmails
+                                    self.roomMembersUsernames = emailToUsername
+                                    
+                                    // Force UI update
+                                    self.objectWillChange.send()
+                                } else {
+                                    print("❌ No users array found in room info")
                                 }
                             }
+                        } else {
+                            print("❌ No room_info found in response")
                         }
+                    } else {
+                        print("❌ Room info retrieval failed: \(status)")
                     }
                 }
-            }.resume()
-        }
+            } else {
+                print("❌ Failed to parse JSON response")
+            }
+        }.resume()
+    }
     
     func connect() {
         socket.connect()
@@ -306,21 +336,32 @@ class RoomManager: ObservableObject{
         }
         
         socket.on("someone_left") { data, ack in
-                print("👋 Someone left the room")
-                if let payload = data.first as? [String: Any],
-                   let leftEmail = payload["email"] as? String {
-                    
-                    print("User left: \(leftEmail)")
-                    
-                    // If the person who left was the host, refresh room info
-                    if leftEmail == self.roomHost {
-                        print("🔄 Host left, refreshing room info...")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            self.getRoomInfo()
-                        }
-                    }
+            print("👋 Someone left the room")
+            if let payload = data.first as? [String: Any],
+               let leftEmail = payload["email"] as? String {
+                
+                print("User left: \(leftEmail)")
+                
+                // Add a small delay to ensure server state is updated
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.getRoomInfo()
                 }
             }
+        }
+        
+        socket.on("someone_joined") { data, ack in
+            print("👋 Someone joined the room")
+            if let payload = data.first as? [String: Any],
+               let joinedEmail = payload["email"] as? String {
+                
+                print("User joined: \(joinedEmail)")
+                
+                // Add a small delay to ensure server state is updated
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.getRoomInfo()
+                }
+            }
+        }
         
         socket.onAny { event in
             print("🔍 Socket event: \(event.event), data: \(event.items)")

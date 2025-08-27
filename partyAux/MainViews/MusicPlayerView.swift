@@ -45,9 +45,12 @@ struct MusicPlayerView: View {
     @State private var isSearching = false
     @State private var isQueueVisible = false
     @State private var isMembersVisible = false
+    @State private var isSettingsVisible = false
     @State private var isPlaying = true
     @State private var songCurrentlyPlaying = false
     @State private var showControls = true
+    @State private var isLiked = false
+    @State private var isDisliked = false
 
     @ObservedObject var roomManager: RoomManager
    
@@ -85,19 +88,24 @@ struct MusicPlayerView: View {
             .zIndex(0)
            
             // Main Player View
-            if !isSearching && !isQueueVisible && !isMembersVisible {
+            if !isSearching && !isQueueVisible && !isMembersVisible && !isSettingsVisible {
                 MainPlayerView(
                     albumArtURL: $albumArtURL,
                     isPlaying: $isPlaying,
                     isSearching: $isSearching,
                     isQueueVisible: $isQueueVisible,
                     isMembersVisible: $isMembersVisible,
+                    isSettingsVisible: $isSettingsVisible,
                     showControls: $showControls,
+                    isLiked: $isLiked,
+                    isDisliked: $isDisliked,
                     queueManager: queueManager,
                     roomManager: roomManager,
                     togglePlayPause: togglePlayPause,
                     playCurrentSong: playCurrentSong,
-                    skipToNext: skipToNext
+                    skipToNext: skipToNext,
+                    toggleLike: toggleLike,
+                    toggleDislike: toggleDislike
                 )
                 .transition(.asymmetric(
                     insertion: .move(edge: .leading).combined(with: .opacity),
@@ -140,14 +148,26 @@ struct MusicPlayerView: View {
                     ))
                     .zIndex(2)
             }
+            
+            // Settings View Overlay
+            if isSettingsVisible {
+                SettingsOverlayView(isSettingsVisible: $isSettingsVisible)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+                    .zIndex(2)
+            }
         }
         .animation(.springy, value: isSearching)
         .animation(.springy, value: isQueueVisible)
         .animation(.springy, value: isMembersVisible)
+        .animation(.springy, value: isSettingsVisible)
         .onAppear {
             setupPlayer()
         }
         .onChange(of: roomManager.currentSong["url"] as? String ?? "") { newVideoID in
+            print("uuid: \(roomManager.currentSong["uuid"]) || added by: \(roomManager.currentSong["addedBy"])")
             handleSongChange(newVideoID)
         }
         .onChange(of: queueManager.queueOrder) { _ in
@@ -192,6 +212,10 @@ struct MusicPlayerView: View {
             print("song changed in onChange")
             print("Updating currentVideoID to: \(newVideoID)")
             self.currentVideoID = newVideoID
+            
+            // Reset like/dislike state for new song
+            self.isLiked = false
+            self.isDisliked = false
            
             if let urlString = roomManager.currentSong["album_art"] as? String,
                let url = URL(string: urlString) {
@@ -244,6 +268,40 @@ struct MusicPlayerView: View {
         queueManager.nextSong {
             playCurrentSong()
         }
+    }
+
+    func toggleLike() {
+        // Add haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        
+        isLiked.toggle()
+        if isLiked {
+            isDisliked = false // Can't be both liked and disliked
+        }
+        print("Song \(isLiked ? "liked" : "unliked"): \(queueManager.currentSong["title"] as? String ?? "Unknown")")
+        
+        // Here you can add your like functionality, such as:
+        // - Save to favorites
+        // - Send to backend
+        // - Update local storage
+    }
+
+    func toggleDislike() {
+        // Add haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        
+        isDisliked.toggle()
+        if isDisliked {
+            isLiked = false // Can't be both liked and disliked
+        }
+        print("Song \(isDisliked ? "disliked" : "undisliked"): \(queueManager.currentSong["title"] as? String ?? "Unknown")")
+        
+        // Here you can add your dislike functionality, such as:
+        // - Remove from favorites
+        // - Send to backend
+        // - Update local storage
     }
 
     func playVideoFromJson(strData: String) {
@@ -333,7 +391,7 @@ struct QueueOverlayView: View {
    
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with Back button
             HStack {
                 Button(action: {
                     // Add haptic feedback
@@ -362,9 +420,238 @@ struct QueueOverlayView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
            
+            // Use the new merged QueueView, but hide its header since we have our own
             QueueView()
                 .environmentObject(queueManager)
                 .environmentObject(roomManager)
+        }
+        .background(LinearGradient.backgroundGradient.ignoresSafeArea())
+    }
+}
+
+/*
+// MARK: - Queue View Content (without header)
+struct QueueViewContent: View {
+    @EnvironmentObject var queueManager: QueueManager
+    @EnvironmentObject var roomManager: RoomManager
+
+    var body: some View {
+        if queueManager.queue.isEmpty {
+            VStack(spacing: 16) {
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+
+                Text("No songs in queue")
+                    .font(.title2)
+                    .foregroundColor(.gray)
+
+                Text("Add some songs to get started!")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            Spacer()
+        } else {
+            QueueViewWithLikeDislike()
+                .environmentObject(queueManager)
+                .environmentObject(roomManager)
+        }
+    }
+}
+
+// MARK: - Queue View With Like/Dislike
+struct QueueViewWithLikeDislike: View {
+    @EnvironmentObject var queueManager: QueueManager
+    @EnvironmentObject var roomManager: RoomManager
+    @State private var songLikes: [String: Bool] = [:]
+    @State private var songDislikes: [String: Bool] = [:]
+    
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(Array(queueManager.queue.enumerated()), id: \.element.key) { index, queueItem in
+                    if let songDict = queueItem.value as? [String: Any] {
+                        QueueSongRowWithLikeDislike(
+                            song: songDict,
+                            index: index,
+                            isLiked: songLikes[songDict["uuid"] as? String ?? ""] ?? false,
+                            isDisliked: songDislikes[songDict["uuid"] as? String ?? ""] ?? false,
+                            onLike: {
+                                let songID = songDict["uuid"] as? String ?? ""
+                                songLikes[songID] = !(songLikes[songID] ?? false)
+                                if songLikes[songID] == true {
+                                    songDislikes[songID] = false // Can't be both liked and disliked
+                                }
+                                
+                                // Add haptic feedback
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                impactFeedback.impactOccurred()
+                                
+                                print("Song \(songLikes[songID] == true ? "liked" : "unliked"): \(songDict["title"] as? String ?? "Unknown")")
+                            },
+                            onDislike: {
+                                let songID = songDict["url"] as? String ?? ""
+                                songDislikes[songID] = !(songDislikes[songID] ?? false)
+                                if songDislikes[songID] == true {
+                                    songLikes[songID] = false // Can't be both liked and disliked
+                                }
+                                
+                                // Add haptic feedback
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                impactFeedback.impactOccurred()
+                                
+                                print("Song \(songDislikes[songID] == true ? "disliked" : "undisliked"): \(songDict["title"] as? String ?? "Unknown")")
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+        }
+    }
+}
+
+// MARK: - Queue Song Row With Like/Dislike
+struct QueueSongRowWithLikeDislike: View {
+    let song: [String: Any]
+    let index: Int
+    let isLiked: Bool
+    let isDisliked: Bool
+    let onLike: () -> Void
+    let onDislike: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Song Index
+            Text("\(index + 1)")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.textTertiary)
+                .frame(width: 20)
+            
+            // Album Art Thumbnail
+            if let albumArtURL = song["album_art"] as? String, let url = URL(string: albumArtURL) {
+                JFIFImageView(imageUrl: url)
+                    .frame(width: 50, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.appCardBackground)
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: 16))
+                            .foregroundColor(.textTertiary)
+                    )
+            }
+            
+            // Song Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(song["title"] as? String ?? "Unknown Title")
+                    .font(.callout)
+                    .fontWeight(.medium)
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
+                
+                Text(song["artist"] as? String ?? "Unknown Artist")
+                    .font(.caption)
+                    .foregroundColor(.textSecondary)
+                    .lineLimit(1)
+                
+                // Added by text
+                Text("Added by \(song["added_by"] as? String ?? "Unknown User")")
+                    .font(.caption2)
+                    .foregroundColor(.textTertiary)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            // Like/Dislike Buttons
+            HStack(spacing: 8) {
+                // Dislike Button
+                Button(action: onDislike) {
+                    Image(systemName: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isDisliked ? .red : .textTertiary)
+                        .scaleEffect(isDisliked ? 1.1 : 1.0)
+                        .animation(.bouncy, value: isDisliked)
+                }
+                .frame(width: 36, height: 36)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(18)
+                
+                // Like Button
+                Button(action: onLike) {
+                    Image(systemName: isLiked ? "hand.thumbsup.fill" : "hand.thumbsup")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isLiked ? .green : .textTertiary)
+                        .scaleEffect(isLiked ? 1.1 : 1.0)
+                        .animation(.bouncy, value: isLiked)
+                }
+                .frame(width: 36, height: 36)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(18)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.appCardBackground.opacity(0.8))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.appSurface, lineWidth: 1)
+        )
+    }
+}
+ */
+
+// MARK: - Settings Overlay View
+struct SettingsOverlayView: View {
+    @Binding var isSettingsVisible: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Button(action: {
+                    // Add haptic feedback
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                   
+                    withAnimation(.springy) {
+                        isSettingsVisible = false
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .medium))
+                        Text("Back")
+                            .font(.callout)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(20)
+                }
+                
+                Spacer()
+                
+                Text("Settings")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.textPrimary)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+           
+            SettingsView()
         }
         .background(LinearGradient.backgroundGradient.ignoresSafeArea())
     }
@@ -394,13 +681,18 @@ struct MainPlayerView: View {
     @Binding var isSearching: Bool
     @Binding var isQueueVisible: Bool
     @Binding var isMembersVisible: Bool
+    @Binding var isSettingsVisible: Bool
     @Binding var showControls: Bool
+    @Binding var isLiked: Bool
+    @Binding var isDisliked: Bool
    
     @ObservedObject var queueManager: QueueManager
     @ObservedObject var roomManager: RoomManager
     let togglePlayPause: () -> Void
     let playCurrentSong: () -> Void
     let skipToNext: () -> Void
+    let toggleLike: () -> Void
+    let toggleDislike: () -> Void
    
     var body: some View {
         VStack(spacing: 0) {
@@ -410,6 +702,7 @@ struct MainPlayerView: View {
                 isSearching: $isSearching,
                 isQueueVisible: $isQueueVisible,
                 isMembersVisible: $isMembersVisible,
+                isSettingsVisible: $isSettingsVisible,
                 roomManager: roomManager
             )
            
@@ -427,8 +720,12 @@ struct MainPlayerView: View {
                 PlayerControlsView(
                     isPlaying: isPlaying,
                     isHost: roomManager.isCurrentUserHost,
+                    isLiked: isLiked,
+                    isDisliked: isDisliked,
                     togglePlayPause: togglePlayPause,
-                    onSkip: skipToNext
+                    onSkip: skipToNext,
+                    toggleLike: toggleLike,
+                    toggleDislike: toggleDislike
                 )
             }
             .padding(.horizontal, 24)
@@ -444,13 +741,14 @@ struct TopHeaderView: View {
     @Binding var isSearching: Bool
     @Binding var isQueueVisible: Bool
     @Binding var isMembersVisible: Bool
+    @Binding var isSettingsVisible: Bool
     let roomManager: RoomManager
    
     @State private var showLeaveAlert = false
    
     var body: some View {
-        HStack {
-            // Room Code Badge with Host Indicator
+        VStack(spacing: 8) {
+            // Room Code Badge on top
             HStack {
                 Image(systemName: roomManager.isCurrentUserHost ? "crown.fill" : "music.note.house.fill")
                     .font(.system(size: 16, weight: .medium))
@@ -460,15 +758,8 @@ struct TopHeaderView: View {
                     .font(.callout)
                     .fontWeight(.bold)
                     .foregroundColor(.textPrimary)
-                
-                /*
-                if roomManager.isCurrentUserHost {
-                    Text("(Host)")
-                        .font(.caption2)
-                        .foregroundColor(.yellow)
-                        .fontWeight(.medium)
-                }
-                 */
+               
+                Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -486,59 +777,28 @@ struct TopHeaderView: View {
                     )
             )
            
-            Spacer()
-           
-            // Action Buttons
+            // Action Buttons Row
             HStack(spacing: 12) {
-                // Members Button - Available to all users
+                // Members Button
                 Button(action: {
-                    // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
-                    
-                    withAnimation(.springy) {
-                        isMembersVisible.toggle()
-                    }
+                    withAnimation(.springy) { isMembersVisible.toggle() }
                 }) {
-                    ZStack {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.textPrimary)
-                        
-                        // Member count badge
-                        /*
-                        if roomManager.roomMembers.count > 0 {
-                            Text("\(roomManager.roomMembers.count)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .frame(width: 16, height: 16)
-                                .background(Color.red)
-                                .cornerRadius(8)
-                                .offset(x: 12, y: -12)
-                        }
-                         */
-                    }
-                    .frame(width: 44, height: 44)
-                    .background(Color.appCardBackground)
-                    .cornerRadius(22)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22)
-                            .stroke(Color.appSurface, lineWidth: 1)
-                    )
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.textPrimary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.appCardBackground)
+                        .cornerRadius(22)
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
-                
-                // Search Button - Only for hosts
+               
+                // Search Button
                 Button(action: {
-                    //if roomManager.isCurrentUserHost {
-                        // Add haptic feedback
-                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                        impactFeedback.impactOccurred()
-                       
-                        withAnimation(.springy) {
-                            isSearching.toggle()
-                        }
-                    //}
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                    withAnimation(.springy) { isSearching.toggle() }
                 }) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 20, weight: .medium))
@@ -546,23 +806,14 @@ struct TopHeaderView: View {
                         .frame(width: 44, height: 44)
                         .background(Color.appCardBackground)
                         .cornerRadius(22)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 22)
-                                .stroke(Color.appSurface, lineWidth: 1)
-                        )
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
-                //.disabled(!roomManager.isCurrentUserHost)
-                //.opacity(roomManager.isCurrentUserHost ? 1.0 : 0.6)
                
-                // Queue Button - Available to all users (view only for non-hosts)
+                // Queue Button
                 Button(action: {
-                    // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
-                   
-                    withAnimation(.springy) {
-                        isQueueVisible.toggle()
-                    }
+                    withAnimation(.springy) { isQueueVisible.toggle() }
                 }) {
                     Image(systemName: "music.note.list")
                         .font(.system(size: 20, weight: .medium))
@@ -570,18 +821,28 @@ struct TopHeaderView: View {
                         .frame(width: 44, height: 44)
                         .background(Color.appCardBackground)
                         .cornerRadius(22)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 22)
-                                .stroke(Color.appSurface, lineWidth: 1)
-                        )
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
-                
+               
+                // Settings Button
+                Button(action: {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                    withAnimation(.springy) { isSettingsVisible.toggle() }
+                }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.textPrimary)
+                        .frame(width: 44, height: 44)
+                        .background(Color.appCardBackground)
+                        .cornerRadius(22)
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
+                }
+               
                 // Leave Room Button
                 Button(action: {
-                    // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                     impactFeedback.impactOccurred()
-                   
                     showLeaveAlert = true
                 }) {
                     Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -590,18 +851,13 @@ struct TopHeaderView: View {
                         .frame(width: 44, height: 44)
                         .background(Color.red.opacity(0.8))
                         .cornerRadius(22)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 22)
-                                .stroke(Color.red, lineWidth: 1)
-                        )
+                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.red, lineWidth: 1))
                 }
                 .alert("Leave Room", isPresented: $showLeaveAlert) {
                     Button("Cancel", role: .cancel) { }
                     Button("Leave", role: .destructive) {
-                        // Add haptic feedback
                         let notificationFeedback = UINotificationFeedbackGenerator()
                         notificationFeedback.notificationOccurred(.warning)
-                       
                         roomManager.leaveRoom()
                     }
                 } message: {
@@ -696,8 +952,12 @@ struct SongInfoView: View {
 struct PlayerControlsView: View {
     let isPlaying: Bool
     let isHost: Bool
+    let isLiked: Bool
+    let isDisliked: Bool
     let togglePlayPause: () -> Void
     let onSkip: () -> Void
+    let toggleLike: () -> Void
+    let toggleDislike: () -> Void
    
     var body: some View {
         VStack(spacing: 24) {
@@ -717,8 +977,51 @@ struct PlayerControlsView: View {
                 .cornerRadius(12)
             }
             
-            // Main Control Row
+            // Like/Dislike Row - Available to all users
             HStack(spacing: 60) {
+                // Thumbs Down Button
+                Button(action: toggleDislike) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.appSurface, lineWidth: 1)
+                            )
+                        
+                        Image(systemName: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(isDisliked ? .red : .white)
+                            .scaleEffect(isDisliked ? 1.1 : 1.0)
+                            .animation(.bouncy, value: isDisliked)
+                    }
+                }
+                
+                /*
+                // Thumbs Up Button
+                Button(action: toggleLike) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.appSurface, lineWidth: 1)
+                            )
+                        
+                        Image(systemName: isLiked ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(isLiked ? .green : .white)
+                            .scaleEffect(isLiked ? 1.1 : 1.0)
+                            .animation(.bouncy, value: isLiked)
+                    }
+                }
+                 */
+            }
+            
+            // Main Control Row
+            HStack(spacing: 40) {
                 // Main Play/Pause Button - Only active for host
                 Button(action: {
                     if isHost {
@@ -781,7 +1084,7 @@ struct PlayerControlsView: View {
                             )
                         
                         Image(systemName: "forward.end.fill")
-                            .font(.system(size: 24, weight: .medium))
+                            .font(.system(size: 20, weight: .medium))
                             .foregroundColor(isHost ? .black : .gray)
                     }
                     .opacity(isHost ? 1.0 : 0.6)

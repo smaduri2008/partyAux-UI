@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var roomManager: RoomManager
     @State private var youtubePlayer: YTPlayerView?
     @State private var currentView: ContentViewState = .loading
+    @State private var selectedTab: Int = 0 // Added for TabView
     
     enum ContentViewState {
         case loading
@@ -43,7 +44,7 @@ struct ContentView: View {
                     case .username:
                         CreateUsernameView()
                     case .authenticated:
-                        AuthenticatedContentView()
+                        AuthenticatedTabView()
                     }
                 }
                 .transition(.asymmetric(
@@ -71,25 +72,45 @@ struct ContentView: View {
         }
     }
     
+    // MARK: - Tab Bar for Authenticated State
     @ViewBuilder
-    private func AuthenticatedContentView() -> some View {
-        VStack(spacing: 0) {
-            if !roomManager.joinedRoom {
-                RoomCreateJoinView()
-                    .environmentObject(roomManager)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+    private func AuthenticatedTabView() -> some View {
+        TabView(selection: $selectedTab) {
+            // Room (Home) Tab
+            VStack(spacing: 0) {
+                if !roomManager.joinedRoom {
+                    RoomCreateJoinView()
+                        .environmentObject(roomManager)
+                }
+                if roomManager.joinedRoom, let queueManager = roomManager.queueManager {
+                    MusicPlayerView(
+                        youtubePlayer: youtubePlayer,
+                        queueManager: queueManager,
+                        roomManager: roomManager
+                    )
+                }
             }
+            .tabItem {
+                Label("Room", systemImage: "music.note.house.fill")
+            }
+            .tag(0)
             
-            if roomManager.joinedRoom, let queueManager = roomManager.queueManager {
-                MusicPlayerView(
-                    youtubePlayer: youtubePlayer,
-                    queueManager: queueManager,
-                    roomManager: roomManager
-                )
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
+            // Library Tab (Placeholder)
+            LibraryTab()
+                .tabItem {
+                    Label("Library", systemImage: "books.vertical.fill")
+                }
+                .tag(1)
+            
+            
+            // Settings Tab (Placeholder)
+            SettingsTab()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape.fill")
+                }
+                .tag(2)
+                .environmentObject(auth)
         }
-        .animation(.springy, value: roomManager.joinedRoom)
     }
     
     @ViewBuilder
@@ -116,6 +137,32 @@ struct ContentView: View {
         }
     }
 }
+
+// Placeholder Views for Library and Settings
+/*
+struct LibraryTab: View {
+    var body: some View {
+        VStack {
+            Text("Library")
+                .font(.title)
+                .padding()
+            Spacer()
+        }
+    }
+}
+ 
+
+struct SettingsTab: View {
+    var body: some View {
+        VStack {
+            Text("Settings")
+                .font(.title)
+                .padding()
+            Spacer()
+        }
+    }
+}
+ */
 
 #Preview {
     ContentView()

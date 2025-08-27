@@ -74,8 +74,21 @@ struct RoomMembersView: View {
         }
         .background(LinearGradient.backgroundGradient.ignoresSafeArea())
         .onAppear {
-            // Refresh room info when members view appears
-            //roomManager.getRoomInfo()
+            print("🔄 RoomMembersView appeared - refreshing room info")
+            roomManager.getRoomInfo()
+        }
+        .onReceive(roomManager.$roomMembers) { newMembers in
+            print("🔄 RoomMembersView detected roomMembers change: \(newMembers)")
+        }
+        .onReceive(roomManager.$roomMembersUsernames) { newUsernames in
+            print("🔄 RoomMembersView detected usernames change: \(newUsernames)")
+        }
+        .onChange(of: roomManager.roomMembers.count) { count in
+            print("🔄 RoomMembersView member count changed to: \(count)")
+        }
+        .refreshable {
+            print("🔄 Pull to refresh triggered")
+            roomManager.getRoomInfo()
         }
     }
 }

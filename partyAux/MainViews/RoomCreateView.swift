@@ -18,7 +18,7 @@ struct RoomCreateJoinView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 50) {
+                VStack(spacing: 30) {
                     Spacer(minLength: 40)
                     
                     // Header Section
@@ -377,6 +377,8 @@ extension String {
     }
 }
 
-#Preview {
-    RoomCreateJoinView()
-}
+/*
+ #Preview {
+ RoomCreateJoinView()
+ }
+ */
