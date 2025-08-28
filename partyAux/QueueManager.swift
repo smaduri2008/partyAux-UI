@@ -46,7 +46,108 @@ class QueueManager: ObservableObject {
         return currentSong["url"] as? String ?? ""
     }
     
+    func updateSongDownvoteCount(songUuid: String, newDownvoteCount: Int, downvotesArray: [String]? = nil) {
+        DispatchQueue.main.async {
+            print("🔄 updateSongDownvoteCount called for \(songUuid) with count \(newDownvoteCount)")
+            
+            // Update the song in the queue without changing order
+            if var songData = self.queue[songUuid] {
+                // Update the downvote count
+                songData["downvote_count"] = newDownvoteCount
+                
+                // Update downvotes array if provided
+                if let downvotesArray = downvotesArray {
+                    songData["downvotes"] = downvotesArray
+                    print("✅ Updated downvotes array for song \(songUuid): \(downvotesArray)")
+                } else {
+                    print("⚠️ No downvotes array provided for song \(songUuid)")
+                }
+                
+                self.queue[songUuid] = songData
+                print("✅ Updated downvote count for song \(songUuid) to \(newDownvoteCount)")
+            }
+            
+            // Also update current song if it matches
+            if let currentSongUuid = self.currentSong["uuid"] as? String,
+               currentSongUuid == songUuid {
+                print("🔄 Updating current song downvote data")
+                
+                let oldDownvotes = self.currentSong["downvotes"] as? [String] ?? []
+                self.currentSong["downvote_count"] = newDownvoteCount
+                
+                // Update downvotes array for current song if provided
+                if let downvotesArray = downvotesArray {
+                    self.currentSong["downvotes"] = downvotesArray
+                    print("✅ Updated current song downvotes array: \(downvotesArray)")
+                } else {
+                    // If no downvotes array provided, fetch current song to get updated data
+                    print("🔄 No downvotes array provided, fetching current song")
+                    self.fetchCurrentSong {
+                        print("✅ Current song refreshed in updateSongDownvoteCount")
+                        // Force UI update by triggering objectWillChange
+                        DispatchQueue.main.async {
+                            self.objectWillChange.send()
+                        }
+                    }
+                    return // Exit early since fetchCurrentSong will trigger the update
+                }
+                
+                let newDownvotes = self.currentSong["downvotes"] as? [String] ?? []
+                print("✅ Updated current song downvote count to \(newDownvoteCount)")
+                print("🔍 Old downvotes: \(oldDownvotes)")
+                print("🔍 New downvotes: \(newDownvotes)")
+            }
+            
+            // Force UI update
+            self.objectWillChange.send()
+        }
+    }
+    
+    func addSongToQueue(_ songData: [String: Any]) {
+        DispatchQueue.main.async {
+            if let uuid = songData["uuid"] as? String {
+                // Only add if not already present to prevent duplicates
+                if !self.queueOrder.contains(uuid) {
+                    self.queue[uuid] = songData
+                    self.queueOrder.append(uuid)
+                    print("✅ Added song \(uuid) to queue at position \(self.queueOrder.count)")
+                } else {
+                    // Update existing song data but don't add to order again
+                    self.queue[uuid] = songData
+                    print("⚠️ Song \(uuid) already in queue, updating data only")
+                }
+                print("Current queue order: \(self.queueOrder)")
+                self.objectWillChange.send()
+            }
+        }
+    }
+    
+    func removeSongFromQueue(_ songUuid: String) {
+        DispatchQueue.main.async {
+            self.queue.removeValue(forKey: songUuid)
+            if let index = self.queueOrder.firstIndex(of: songUuid) {
+                self.queueOrder.remove(at: index)
+                print("✅ Removed song \(songUuid) from queue at index \(index)")
+            }
+            print("Current queue order: \(self.queueOrder)")
+            self.objectWillChange.send()
+        }
+    }
+    
+    func removeFirstSongFromQueue() {
+        DispatchQueue.main.async {
+            if let firstSongUuid = self.queueOrder.first {
+                self.queue.removeValue(forKey: firstSongUuid)
+                self.queueOrder.removeFirst()
+                print("✅ Removed first song \(firstSongUuid) from queue")
+                print("Current queue order: \(self.queueOrder)")
+                self.objectWillChange.send()
+            }
+        }
+    }
+    
     func fetchQueue(completion: @escaping () -> Void) {
+        print("🔄 Fetching queue...")
         QueueManager.sendPostRequest(body: ["jwt": self.jwt_auth, "room": self.room], endpoint: "/get-queue") { result in
             if let result = result {
                 DispatchQueue.main.async {
@@ -55,20 +156,47 @@ class QueueManager: ObservableObject {
                     self.queueOrder.removeAll()
                     
                     if let songList = result["queue"] as? [[String: Any]] {
-                        for song in songList {
+                        print("📦 Received \(songList.count) songs from server")
+                        
+                        var seenIDs = Set<String>()
+                        
+                        for (index, song) in songList.enumerated() {
                             let uniqueID = song["uuid"] as? String ?? UUID().uuidString
-                            //let url = song["url"] as? String ?? UUID().uuidString
+                            
+                            // Skip if we've already seen this ID (prevent duplicates)
+                            if seenIDs.contains(uniqueID) {
+                                print("⚠️ Skipping duplicate song ID: \(uniqueID)")
+                                continue
+                            }
+                            seenIDs.insert(uniqueID)
+                            
+                            // Validate that we have essential song data
+                            let title = song["title"] as? String ?? "Unknown Title"
+                            let artist = song["artist"] as? String ?? "Unknown Artist"
+                            
+                            print("📝 Processing song \(index + 1): \(title) by \(artist) (ID: \(uniqueID))")
                             
                             self.queue[uniqueID] = song
                             self.queueOrder.append(uniqueID) // Maintain order
                         }
+                        print("✅ Queue updated successfully with \(self.queue.count) songs")
+                        print("🔗 Queue order: \(self.queueOrder)")
+                        
+                        // Debug: Check for any inconsistencies
+                        self.validateQueueConsistency()
+                    } else {
+                        print("⚠️ No queue data received or invalid format")
                     }
-                    print("Queue updated with \(self.queue.count) songs")
+                    
+                    // Force UI update
+                    self.objectWillChange.send()
                     completion()
                 }
             } else {
-                print("Failed to fetch queue")
-                completion()
+                print("❌ Failed to fetch queue - no result received")
+                DispatchQueue.main.async {
+                    completion()
+                }
             }
         }
     }
@@ -142,5 +270,35 @@ class QueueManager: ObservableObject {
         }
 
         task.resume()
+    }
+    
+    // MARK: - Debug Helper
+    private func validateQueueConsistency() {
+        let queueKeys = Set(queue.keys)
+        let orderSet = Set(queueOrder)
+        
+        if queueKeys != orderSet {
+            print("⚠️ Queue consistency issue detected!")
+            print("Queue keys count: \(queueKeys.count), Order count: \(queueOrder.count)")
+            
+            let missingFromOrder = queueKeys.subtracting(orderSet)
+            let missingFromQueue = orderSet.subtracting(queueKeys)
+            
+            if !missingFromOrder.isEmpty {
+                print("Missing from order: \(missingFromOrder)")
+            }
+            if !missingFromQueue.isEmpty {
+                print("Missing from queue: \(missingFromQueue)")
+            }
+        }
+        
+        // Check for duplicates in order
+        let duplicates = queueOrder.reduce(into: [String: Int]()) { counts, id in
+            counts[id, default: 0] += 1
+        }.filter { $0.value > 1 }
+        
+        if !duplicates.isEmpty {
+            print("⚠️ Duplicate IDs found in queue order: \(duplicates)")
+        }
     }
 }

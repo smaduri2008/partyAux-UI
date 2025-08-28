@@ -173,8 +173,32 @@ struct MusicPlayerView: View {
         .onChange(of: queueManager.queueOrder) { _ in
             handleQueueChange()
         }
+        .onChange(of: queueManager.currentSong["downvotes"] as? [String] ?? []) { downvotesArray in
+            // Update isDisliked state when downvotes array changes
+            print("🔄 Downvotes array changed in onChange: \(downvotesArray)")
+            updateDislikedState(downvotesArray: downvotesArray)
+        }
+        .onChange(of: queueManager.currentSong["downvote_count"] as? Int ?? 0) { newCount in
+            // Also update when downvote count changes (in case array isn't updated)
+            print("🔄 Downvote count changed in onChange: \(newCount)")
+            if let downvotesArray = queueManager.currentSong["downvotes"] as? [String] {
+                updateDislikedState(downvotesArray: downvotesArray)
+            }
+        }
         .onChange(of: songCurrentlyPlaying) { isPlaying in
             print("🎵 songCurrentlyPlaying changed to: \(isPlaying)")
+        }
+    }
+    
+    // MARK: - Helper Methods
+    private func updateDislikedState(downvotesArray: [String]) {
+        let userEmail = roomManager.userData.email
+        let wasDisliked = isDisliked
+        isDisliked = downvotesArray.contains(userEmail)
+        
+        if wasDisliked != isDisliked {
+            print("🔄 Dislike state updated: \(wasDisliked) -> \(isDisliked) for user \(userEmail)")
+            print("🔄 Downvotes array: \(downvotesArray)")
         }
     }
    
@@ -207,17 +231,26 @@ struct MusicPlayerView: View {
     private func handleSongChange(_ newVideoID: String) {
         roomManager.getRoomInfo()
         print("Current song URL changed: \(newVideoID)")
-        if !newVideoID.isEmpty && newVideoID != currentVideoID && !songCurrentlyPlaying {
+        if !newVideoID.isEmpty && newVideoID != currentVideoID {
             queueManager.currentSong = roomManager.currentSong
             print("song changed in onChange")
             print("Updating currentVideoID to: \(newVideoID)")
             self.currentVideoID = newVideoID
             
-            // Reset like/dislike state for new song
+            // Reset like state for new song
             self.isLiked = false
-            self.isDisliked = false
+            
+            // Check if current user has already downvoted this song
+            // Use queueManager.currentSong for consistency since that's what the UI uses
+            if let downvotesArray = queueManager.currentSong["downvotes"] as? [String] {
+                self.isDisliked = downvotesArray.contains(roomManager.userData.email)
+                print("🔄 Song changed - isDisliked set to: \(self.isDisliked) based on array: \(downvotesArray)")
+            } else {
+                self.isDisliked = false
+                print("🔄 Song changed - no downvotes array found, isDisliked set to false")
+            }
            
-            if let urlString = roomManager.currentSong["album_art"] as? String,
+            if let urlString = queueManager.currentSong["album_art"] as? String,
                let url = URL(string: urlString) {
                 self.albumArtURL = url
             }
@@ -242,7 +275,7 @@ struct MusicPlayerView: View {
             currentVideoID = firstID
         }
     }
-
+   
     // MARK: - Control Methods
     func togglePlayPause() {
         guard playerReady, let player = youtubePlayer else {
@@ -292,16 +325,72 @@ struct MusicPlayerView: View {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
         
-        isDisliked.toggle()
-        if isDisliked {
-            isLiked = false // Can't be both liked and disliked
-        }
-        print("Song \(isDisliked ? "disliked" : "undisliked"): \(queueManager.currentSong["title"] as? String ?? "Unknown")")
+        print("🔽 toggleDislike called - current isDisliked: \(isDisliked)")
         
-        // Here you can add your dislike functionality, such as:
-        // - Remove from favorites
-        // - Send to backend
-        // - Update local storage
+        // First check: if isDisliked is already true, user has already voted
+        if isDisliked {
+            print("⚠️ User has already downvoted this song (checked isDisliked state)")
+            return
+        }
+        
+        // Check if user has already downvoted this song
+        guard let currentSongUuid = queueManager.currentSong["uuid"] as? String else {
+            print("❌ No current song UUID found")
+            return
+        }
+        
+        print("🔍 User trying to downvote song UUID: \(currentSongUuid)")
+        print("🔍 Current song title: \(queueManager.currentSong["title"] as? String ?? "Unknown")")
+        
+        let userEmail = roomManager.userData.email
+        print("🔍 Checking downvotes for user: \(userEmail)")
+        
+        // Check downvotes array if it exists
+        if let downvotesArray = queueManager.currentSong["downvotes"] as? [String] {
+            print("🔍 Current downvotes array: \(downvotesArray)")
+            if downvotesArray.contains(userEmail) {
+                print("⚠️ User has already downvoted this song (checked downvotes array)")
+                // Update isDisliked state to match the array
+                self.isDisliked = true
+                return
+            }
+        } else {
+            print("⚠️ No downvotes array found - proceeding with downvote")
+        }
+        
+        // Perform the downvote
+        print("📤 Sending downvote request for song: \(currentSongUuid)")
+        roomManager.downvoteSong(songUuid: currentSongUuid) { success, message in
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ Downvote successful: \(message)")
+                    self.isDisliked = true
+                    self.isLiked = false
+                    
+                    // Immediately update the local downvote count for instant feedback
+                    let currentCount = self.queueManager.currentSong["downvote_count"] as? Int ?? 0
+                    self.queueManager.currentSong["downvote_count"] = currentCount + 1
+                    
+                    // Also add user to downvotes array if it exists
+                    if var downvotesArray = self.queueManager.currentSong["downvotes"] as? [String] {
+                        if !downvotesArray.contains(self.roomManager.userData.email) {
+                            downvotesArray.append(self.roomManager.userData.email)
+                            self.queueManager.currentSong["downvotes"] = downvotesArray
+                            print("✅ Updated local downvotes array: \(downvotesArray)")
+                        }
+                    } else {
+                        // Create downvotes array if it doesn't exist
+                        self.queueManager.currentSong["downvotes"] = [self.roomManager.userData.email]
+                        print("✅ Created new downvotes array: [\(self.roomManager.userData.email)]")
+                    }
+                    
+                    print("✅ Local UI updated - isDisliked: \(self.isDisliked)")
+                    // The socket event will handle updating other users' views
+                } else {
+                    print("❌ Downvote failed: \(message)")
+                }
+            }
+        }
     }
 
     func playVideoFromJson(strData: String) {
@@ -429,184 +518,9 @@ struct QueueOverlayView: View {
     }
 }
 
-/*
-// MARK: - Queue View Content (without header)
-struct QueueViewContent: View {
-    @EnvironmentObject var queueManager: QueueManager
-    @EnvironmentObject var roomManager: RoomManager
-
-    var body: some View {
-        if queueManager.queue.isEmpty {
-            VStack(spacing: 16) {
-                Image(systemName: "music.note.list")
-                    .font(.system(size: 60))
-                    .foregroundColor(.gray)
-
-                Text("No songs in queue")
-                    .font(.title2)
-                    .foregroundColor(.gray)
-
-                Text("Add some songs to get started!")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-            Spacer()
-        } else {
-            QueueViewWithLikeDislike()
-                .environmentObject(queueManager)
-                .environmentObject(roomManager)
-        }
-    }
-}
-
-// MARK: - Queue View With Like/Dislike
-struct QueueViewWithLikeDislike: View {
-    @EnvironmentObject var queueManager: QueueManager
-    @EnvironmentObject var roomManager: RoomManager
-    @State private var songLikes: [String: Bool] = [:]
-    @State private var songDislikes: [String: Bool] = [:]
-    
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(Array(queueManager.queue.enumerated()), id: \.element.key) { index, queueItem in
-                    if let songDict = queueItem.value as? [String: Any] {
-                        QueueSongRowWithLikeDislike(
-                            song: songDict,
-                            index: index,
-                            isLiked: songLikes[songDict["uuid"] as? String ?? ""] ?? false,
-                            isDisliked: songDislikes[songDict["uuid"] as? String ?? ""] ?? false,
-                            onLike: {
-                                let songID = songDict["uuid"] as? String ?? ""
-                                songLikes[songID] = !(songLikes[songID] ?? false)
-                                if songLikes[songID] == true {
-                                    songDislikes[songID] = false // Can't be both liked and disliked
-                                }
-                                
-                                // Add haptic feedback
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                                impactFeedback.impactOccurred()
-                                
-                                print("Song \(songLikes[songID] == true ? "liked" : "unliked"): \(songDict["title"] as? String ?? "Unknown")")
-                            },
-                            onDislike: {
-                                let songID = songDict["url"] as? String ?? ""
-                                songDislikes[songID] = !(songDislikes[songID] ?? false)
-                                if songDislikes[songID] == true {
-                                    songLikes[songID] = false // Can't be both liked and disliked
-                                }
-                                
-                                // Add haptic feedback
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                                impactFeedback.impactOccurred()
-                                
-                                print("Song \(songDislikes[songID] == true ? "disliked" : "undisliked"): \(songDict["title"] as? String ?? "Unknown")")
-                            }
-                        )
-                    }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-        }
-    }
-}
-
-// MARK: - Queue Song Row With Like/Dislike
-struct QueueSongRowWithLikeDislike: View {
-    let song: [String: Any]
-    let index: Int
-    let isLiked: Bool
-    let isDisliked: Bool
-    let onLike: () -> Void
-    let onDislike: () -> Void
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            // Song Index
-            Text("\(index + 1)")
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.textTertiary)
-                .frame(width: 20)
-            
-            // Album Art Thumbnail
-            if let albumArtURL = song["album_art"] as? String, let url = URL(string: albumArtURL) {
-                JFIFImageView(imageUrl: url)
-                    .frame(width: 50, height: 50)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.appCardBackground)
-                    .frame(width: 50, height: 50)
-                    .overlay(
-                        Image(systemName: "music.note")
-                            .font(.system(size: 16))
-                            .foregroundColor(.textTertiary)
-                    )
-            }
-            
-            // Song Info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(song["title"] as? String ?? "Unknown Title")
-                    .font(.callout)
-                    .fontWeight(.medium)
-                    .foregroundColor(.textPrimary)
-                    .lineLimit(1)
-                
-                Text(song["artist"] as? String ?? "Unknown Artist")
-                    .font(.caption)
-                    .foregroundColor(.textSecondary)
-                    .lineLimit(1)
-                
-                // Added by text
-                Text("Added by \(song["added_by"] as? String ?? "Unknown User")")
-                    .font(.caption2)
-                    .foregroundColor(.textTertiary)
-                    .lineLimit(1)
-            }
-            
-            Spacer()
-            
-            // Like/Dislike Buttons
-            HStack(spacing: 8) {
-                // Dislike Button
-                Button(action: onDislike) {
-                    Image(systemName: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(isDisliked ? .red : .textTertiary)
-                        .scaleEffect(isDisliked ? 1.1 : 1.0)
-                        .animation(.bouncy, value: isDisliked)
-                }
-                .frame(width: 36, height: 36)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(18)
-                
-                // Like Button
-                Button(action: onLike) {
-                    Image(systemName: isLiked ? "hand.thumbsup.fill" : "hand.thumbsup")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(isLiked ? .green : .textTertiary)
-                        .scaleEffect(isLiked ? 1.1 : 1.0)
-                        .animation(.bouncy, value: isLiked)
-                }
-                .frame(width: 36, height: 36)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(18)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.appCardBackground.opacity(0.8))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.appSurface, lineWidth: 1)
-        )
-    }
-}
- */
+// MARK: - Queue View Content (without header) - REMOVED DUPLICATE CODE
+// Using the QueueView from QueueView.swift instead to avoid duplication
+   
 
 // MARK: - Settings Overlay View
 struct SettingsOverlayView: View {
@@ -722,6 +636,8 @@ struct MainPlayerView: View {
                     isHost: roomManager.isCurrentUserHost,
                     isLiked: isLiked,
                     isDisliked: isDisliked,
+                    queueManager: queueManager,
+                    roomManager: roomManager,
                     togglePlayPause: togglePlayPause,
                     onSkip: skipToNext,
                     toggleLike: toggleLike,
@@ -954,10 +870,30 @@ struct PlayerControlsView: View {
     let isHost: Bool
     let isLiked: Bool
     let isDisliked: Bool
+    let queueManager: QueueManager
+    let roomManager: RoomManager
     let togglePlayPause: () -> Void
     let onSkip: () -> Void
     let toggleLike: () -> Void
     let toggleDislike: () -> Void
+    
+    private var currentSongDownvotes: Int {
+        guard let downvotesArray = queueManager.currentSong["downvotes"] as? [String] else {
+            // Fallback to downvote_count if downvotes array is not available
+            return queueManager.currentSong["downvote_count"] as? Int ?? 0
+        }
+        return downvotesArray.count
+    }
+    
+    private var hasUserDownvoted: Bool {
+        guard let downvotesArray = queueManager.currentSong["downvotes"] as? [String] else {
+            print("🔍 hasUserDownvoted: No downvotes array found")
+            return false
+        }
+        let result = downvotesArray.contains(roomManager.userData.email)
+        print("🔍 hasUserDownvoted: \(result) for user \(roomManager.userData.email) in array \(downvotesArray)")
+        return result
+    }
    
     var body: some View {
         VStack(spacing: 24) {
@@ -977,6 +913,15 @@ struct PlayerControlsView: View {
                 .cornerRadius(12)
             }
             
+            // Downvote info for current song
+            if !queueManager.currentSong.isEmpty {
+                CurrentSongDownvoteInfo(
+                    downvotes: currentSongDownvotes,
+                    maxDownvotes: roomManager.maxDownvotes,
+                    hasUserDownvoted: hasUserDownvoted
+                )
+            }
+            
             // Like/Dislike Row - Available to all users
             HStack(spacing: 60) {
                 // Thumbs Down Button
@@ -990,13 +935,14 @@ struct PlayerControlsView: View {
                                     .stroke(Color.appSurface, lineWidth: 1)
                             )
                         
-                        Image(systemName: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                        Image(systemName: hasUserDownvoted ? "hand.thumbsdown.fill" : "hand.thumbsdown")
                             .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(isDisliked ? .red : .white)
-                            .scaleEffect(isDisliked ? 1.1 : 1.0)
-                            .animation(.bouncy, value: isDisliked)
+                            .foregroundColor(hasUserDownvoted ? .red : .white)
+                            .scaleEffect(hasUserDownvoted ? 1.1 : 1.0)
+                            .animation(.bouncy, value: hasUserDownvoted)
                     }
                 }
+                .disabled(hasUserDownvoted)
                 
                 /*
                 // Thumbs Up Button
@@ -1093,5 +1039,97 @@ struct PlayerControlsView: View {
             }
         }
         .animation(.smooth, value: isPlaying)
+    }
+}
+
+// MARK: - Current Song Downvote Info
+struct CurrentSongDownvoteInfo: View {
+    let downvotes: Int
+    let maxDownvotes: Int
+    let hasUserDownvoted: Bool
+    
+    private var progress: Double {
+        guard maxDownvotes > 0 else { return 0 }
+        return Double(downvotes) / Double(maxDownvotes)
+    }
+    
+    private var warningLevel: Int {
+        switch progress {
+        case 0..<0.5:
+            return 0  // Safe
+        case 0.5..<0.8:
+            return 1  // Warning
+        default:
+            return 2  // Danger
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Warning icon
+            Image(systemName: warningLevel == 2 ? "exclamationmark.triangle.fill" : 
+                             warningLevel == 1 ? "exclamationmark.circle.fill" : "info.circle.fill")
+                .font(.system(size: 16))
+                .foregroundColor(warningLevel == 2 ? .red : 
+                               warningLevel == 1 ? .orange : .blue)
+            
+            // Progress bar
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Downvotes")
+                        .font(.caption)
+                        .foregroundColor(.textPrimary)
+                    
+                    Spacer()
+                    
+                    Text("\(downvotes)/\(maxDownvotes)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(warningLevel == 2 ? .red : 
+                                       warningLevel == 1 ? .orange : .textSecondary)
+                }
+                
+                // Progress bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.2))
+                            .frame(height: 4)
+                        
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: [
+                                    warningLevel == 2 ? .red : 
+                                    warningLevel == 1 ? .orange : .blue,
+                                    warningLevel == 2 ? .red.opacity(0.7) : 
+                                    warningLevel == 1 ? .orange.opacity(0.7) : .blue.opacity(0.7)
+                                ]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: geometry.size.width * progress, height: 4)
+                            .animation(.easeInOut(duration: 0.3), value: progress)
+                    }
+                }
+                .frame(height: 4)
+            }
+            
+            // User vote indicator
+            if hasUserDownvoted {
+                Image(systemName: "hand.thumbsdown.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
+        )
     }
 }

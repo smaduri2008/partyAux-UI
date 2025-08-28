@@ -8,10 +8,13 @@
 import SwiftUI
 
 struct LibraryTab: View {
+    @EnvironmentObject var userData: UserAuth
+    
     var body: some View {
-        VStack{
-            Text("This is the library view, you can add playlists")
+        NavigationView {
+            PlaylistsView(userData: userData)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 

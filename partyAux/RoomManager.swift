@@ -6,6 +6,7 @@ class RoomManager: ObservableObject{
     @Published var userData: UserAuth
     @Published var queueManager: QueueManager?
     @Published var downvotes: Int = 5
+    @Published var maxDownvotes: Int = 5  // Track the room's max downvotes setting
     @Published var roomCode: String = ""
     @Published var currentSong: [String: Any] = [:]
     @Published var joinedRoom: Bool = false
@@ -188,6 +189,14 @@ class RoomManager: ObservableObject{
                                 } else {
                                     print("❌ No users array found in room info")
                                 }
+                                
+                                // Parse max_downvotes
+                                if let maxDownvotesValue = roomInfo["max_downvotes"] as? Int {
+                                    self.maxDownvotes = maxDownvotesValue
+                                    print("🎯 Max downvotes set to: \(maxDownvotesValue)")
+                                } else {
+                                    print("⚠️ No max_downvotes found in room info, using default")
+                                }
                             }
                         } else {
                             print("❌ No room_info found in response")
@@ -256,8 +265,72 @@ class RoomManager: ObservableObject{
         disconnect()
     }
     
-
+    func downvoteSong(songUuid: String, completion: @escaping (Bool, String) -> Void) {
+        let url = userData.url + "/add-downvote"
+        guard let urlRequest = URL(string: url) else {
+            completion(false, "Invalid URL")
+            return
+        }
         
+        var request = URLRequest(url: urlRequest)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "jwt": userData.jwt ?? "",
+            "room": roomCode,
+            "song_uuid": songUuid
+        ])
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    completion(false, "No response from server")
+                }
+                return
+            }
+            
+            if let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                DispatchQueue.main.async {
+                    if let status = jsonData["status"] as? String {
+                        if status == "Downvote added" {
+                            let downvoteCount = jsonData["downvotes"] as? Int ?? 0
+                            completion(true, "Downvoted! (\(downvoteCount)/\(self.maxDownvotes))")
+                        } else {
+                            completion(false, status)
+                        }
+                    } else {
+                        completion(false, "Unknown response")
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    completion(false, "Failed to parse response")
+                }
+            }
+        }.resume()
+    }
+    
+    private func updateCurrentSongDownvoteData(downvotes: Int) {
+        // Update current song downvote count
+        self.currentSong["downvote_count"] = downvotes
+        self.queueManager?.currentSong["downvote_count"] = downvotes
+        
+        // Always refresh current song data to get accurate downvotes array
+        // since socket events don't always provide the full user list
+        print("🔄 Refreshing current song to get updated downvotes array")
+        self.queueManager?.fetchCurrentSong {
+            print("✅ Current song data refreshed after downvote")
+            DispatchQueue.main.async {
+                // Update our current song reference
+                self.currentSong = self.queueManager?.currentSong ?? [:]
+                // Force UI update
+                self.queueManager?.objectWillChange.send()
+            }
+        }
+        
+        print("🔄 Current song downvote count updated via socket")
+    }
+    
     func eventHandlers() {
         print("Setting up event handlers")
         
@@ -303,8 +376,10 @@ class RoomManager: ObservableObject{
         
         socket.on("delete_head_song") { data, ack in
             print("🗑️ Head song deleted from queue")
-            self.queueManager?.fetchQueue {
-                print("🔄 Queue refreshed after head song deletion")
+            DispatchQueue.main.async {
+                // Remove first song from queue without full refresh
+                self.queueManager?.removeFirstSongFromQueue()
+                print("🔄 Removed head song from queue")
             }
         }
         
@@ -312,8 +387,12 @@ class RoomManager: ObservableObject{
             print("➕ Song added to queue")
             if let payload = data.first as? [String: Any],
                let songDict = payload["song"] as? [String: Any] {
-                if self.currentSong.isEmpty {
-                    DispatchQueue.main.async {
+                DispatchQueue.main.async {
+                    // Add song to queue without changing order of existing songs
+                    self.queueManager?.addSongToQueue(songDict)
+                    
+                    // If this is the first song and no current song, set as current
+                    if self.currentSong.isEmpty {
                         self.currentSong = songDict
                         self.queueManager?.currentSong = songDict
                         print("✅ Set as current song since queue was empty")
@@ -324,17 +403,93 @@ class RoomManager: ObservableObject{
         
         socket.on("remove_song") { data, ack in
             print("➖ Song removed from queue")
-            self.queueManager?.fetchQueue {
-                print("🔄 Queue updated after song removal")
+            if let payload = data.first as? [String: Any],
+               let removedUuid = payload["song"] as? String {
+                DispatchQueue.main.async {
+                    // Remove specific song without affecting order of other songs
+                    self.queueManager?.removeSongFromQueue(removedUuid)
+                    print("🔄 Removed song \(removedUuid) from queue")
+                }
+            } else {
+                // Fallback to full refresh if we don't have the UUID
+                self.queueManager?.fetchQueue {
+                    print("🔄 Queue updated after song removal (fallback)")
+                }
             }
         }
         
         socket.on("downvote") { data, ack in
-            print("👎 Song downvoted")
+            print("👎 Song downvoted - socket event received")
             if let payload = data.first as? [String: Any],
-               let songDict = payload["song"] as? [String: Any],
+               let songUuid = payload["song"] as? String,
                let downvotes = payload["downvotes"] as? Int {
-                print("📊 Song \(songDict) now has \(downvotes) downvotes")
+                print("📊 Song \(songUuid) now has \(downvotes) downvotes")
+                
+                // Try to get downvotes array from payload if available
+                let downvotesArray = payload["downvotes_array"] as? [String]
+                print("🔍 Downvotes array from socket: \(downvotesArray ?? [])")
+                print("🔍 Full socket payload: \(payload)")
+                
+                DispatchQueue.main.async {
+                    // Check if this is the current song
+                    let currentSongUuid = self.currentSong["uuid"] as? String
+                    let queueManagerCurrentSongUuid = self.queueManager?.currentSong["uuid"] as? String
+                    let isCurrentSong = (currentSongUuid == songUuid) || (queueManagerCurrentSongUuid == songUuid)
+                    
+                    print("🔍 RoomManager current song UUID: \(currentSongUuid ?? "nil")")
+                    print("🔍 QueueManager current song UUID: \(queueManagerCurrentSongUuid ?? "nil")")
+                    print("🔍 Socket event song UUID: \(songUuid)")
+                    print("🔍 Is current song: \(isCurrentSong)")
+                    
+                    if downvotesArray != nil {
+                        // If we have the complete downvotes array, update immediately
+                        self.queueManager?.updateSongDownvoteCount(songUuid: songUuid, newDownvoteCount: downvotes, downvotesArray: downvotesArray)
+                        
+                        if isCurrentSong {
+                            print("🎯 Updating current song data with array")
+                            self.updateCurrentSongDownvoteData(downvotes: downvotes)
+                        }
+                    } else {
+                        // Socket event doesn't include downvotes array - need to fetch fresh data
+                        print("⚠️ No downvotes array in socket event - fetching fresh data")
+                        
+                        if isCurrentSong {
+                            // For current song, fetch current song data to get the downvotes array
+                            print("🔄 Fetching current song data to get accurate downvotes array")
+                            self.queueManager?.fetchCurrentSong {
+                                DispatchQueue.main.async {
+                                    // Update current song references
+                                    self.currentSong = self.queueManager?.currentSong ?? [:]
+                                    self.queueManager?.objectWillChange.send()
+                                    print("✅ Current song data refreshed with downvotes array")
+                                }
+                            }
+                        } else {
+                            // For queue songs, fetch the full queue to get updated downvotes arrays
+                            print("🔄 Fetching queue data to get accurate downvotes arrays")
+                            self.queueManager?.fetchQueue {
+                                print("✅ Queue data refreshed with downvotes arrays")
+                            }
+                        }
+                    }
+                }
+            } else {
+                print("❌ Invalid downvote socket event payload")
+                print("❌ Raw data: \(data)")
+            }
+        }
+        
+        socket.on("delete_song_from_queue") { data, ack in
+            print("🗑️ Song deleted from queue due to downvotes")
+            if let payload = data.first as? [String: Any],
+               let deletedUuid = payload["uuid"] as? String {
+                print("🗑️ Deleted song UUID: \(deletedUuid)")
+                
+                DispatchQueue.main.async {
+                    // Remove specific song without affecting order of other songs
+                    self.queueManager?.removeSongFromQueue(deletedUuid)
+                    print("🔄 Removed song \(deletedUuid) due to downvotes")
+                }
             }
         }
         

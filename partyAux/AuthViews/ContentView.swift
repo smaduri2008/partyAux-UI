@@ -95,12 +95,13 @@ struct ContentView: View {
             }
             .tag(0)
             
-            // Library Tab (Placeholder)
+            // Library Tab (Playlist functionality)
             LibraryTab()
                 .tabItem {
                     Label("Library", systemImage: "books.vertical.fill")
                 }
                 .tag(1)
+                .environmentObject(auth)
             
             
             // Settings Tab (Placeholder)
