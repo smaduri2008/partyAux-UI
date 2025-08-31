@@ -1,3 +1,10 @@
+//
+//  ContentView.swift
+//  partyAux
+//
+//  Created by Sahas Maduri on 7/11/25.
+//
+
 import SwiftUI
 
 struct EmailView: View {

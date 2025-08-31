@@ -24,6 +24,7 @@ EXAMPLE USAGE:
  }
  
  
+ 
  ALL INCOMING NETWORK REQUESTS SHOULD GO HERE
  
  VIDEO EVENTS FOUND IN YOUTUBEPLAYERVIEW.VIEW
@@ -152,6 +153,7 @@ struct MusicPlayerView: View {
             // Settings View Overlay
             if isSettingsVisible {
                 SettingsOverlayView(isSettingsVisible: $isSettingsVisible)
+                    .environmentObject(roomManager)
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
                         removal: .move(edge: .leading).combined(with: .opacity)

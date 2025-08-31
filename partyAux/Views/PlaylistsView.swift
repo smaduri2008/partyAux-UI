@@ -14,6 +14,9 @@ struct PlaylistsView: View {
     @State private var searchText = ""
     @State private var selectedSegment = 0 // 0: My Playlists, 1: Discover
     @State private var animatedIndex: Int? = nil
+    @State private var showingDeleteAlert = false
+    @State private var playlistToDelete: Playlist? = nil
+    @State private var isEditMode = false // Add edit mode state
     
     init(userData: UserAuth) {
         _playlistManager = StateObject(wrappedValue: PlaylistManager(userData: userData))
@@ -30,6 +33,20 @@ struct PlaylistsView: View {
                 
                 Spacer()
                 
+                // Edit button (only show for My Playlists)
+                if selectedSegment == 0 && !playlistManager.userPlaylists.isEmpty {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isEditMode.toggle()
+                        }
+                    }) {
+                        Text(isEditMode ? "Done" : "Edit")
+                            .font(.headline)
+                            .foregroundColor(.purple)
+                    }
+                    .padding(.trailing, 8)
+                }
+                
                 Button(action: {
                     showingCreatePlaylist = true
                 }) {
@@ -41,19 +58,70 @@ struct PlaylistsView: View {
             .padding(.horizontal)
             .padding(.top)
             
-            // Segment Control
-            Picker("", selection: $selectedSegment) {
-                Text("My Playlists").tag(0)
-                Text("Discover").tag(1)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .onChange(of: selectedSegment) { _ in
-                if selectedSegment == 1 {
-                    searchText = ""
-                    playlistManager.searchedPlaylists = []
+            // Custom Segment Control at the top
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    // My Playlists Button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            selectedSegment = 0
+                            isEditMode = false // Reset edit mode when switching tabs
+                        }
+                        if selectedSegment != 0 {
+                            searchText = ""
+                            playlistManager.searchedPlaylists = []
+                        }
+                    }) {
+                        VStack(spacing: 8) {
+                            Text("My Playlists")
+                                .font(.headline)
+                                .fontWeight(selectedSegment == 0 ? .semibold : .regular)
+                                .foregroundColor(selectedSegment == 0 ? .white : .gray)
+                            
+                            Rectangle()
+                                .fill(selectedSegment == 0 ? Color.purple : Color.clear)
+                                .frame(height: 3)
+                                .cornerRadius(1.5)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(Color.clear)
+                    
+                    // Discover Button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            selectedSegment = 1
+                            isEditMode = false // Reset edit mode when switching tabs
+                        }
+                        if selectedSegment != 1 {
+                            searchText = ""
+                            playlistManager.searchedPlaylists = []
+                        }
+                    }) {
+                        VStack(spacing: 8) {
+                            Text("Discover")
+                                .font(.headline)
+                                .fontWeight(selectedSegment == 1 ? .semibold : .regular)
+                                .foregroundColor(selectedSegment == 1 ? .white : .gray)
+                            
+                            Rectangle()
+                                .fill(selectedSegment == 1 ? Color.purple : Color.clear)
+                                .frame(height: 3)
+                                .cornerRadius(1.5)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(Color.clear)
                 }
+                .padding(.horizontal)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+                
+                // Divider line
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(height: 1)
+                    .padding(.horizontal)
             }
             
             // Search bar for discover tab
@@ -74,20 +142,27 @@ struct PlaylistsView: View {
                                 searchPlaylists()
                             }
                     }
-                    .padding(10)
+                    .padding(12)
                     .background(Color.white)
-                    .cornerRadius(8)
-                    .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    .cornerRadius(12)
+                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                     
                     Button(action: searchPlaylists) {
                         Image(systemName: "arrow.forward.circle.fill")
-                            .font(.system(size: 28))
+                            .font(.system(size: 32))
                             .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .purple)
                     }
                     .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .scaleEffect(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.9 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: searchText.isEmpty)
                 }
                 .padding(.horizontal)
+                .padding(.top, 16)
                 .padding(.bottom, 8)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
             }
             
             // Content
@@ -130,13 +205,40 @@ struct PlaylistsView: View {
                         if playlistManager.userPlaylists.isEmpty {
                             EmptyPlaylistsView()
                         } else {
-                            ForEach(playlistManager.userPlaylists.indices, id: \.self) { index in
-                                let playlist = playlistManager.userPlaylists[index]
-                                NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager)) {
-                                    PlaylistRowView(playlist: playlist)
+                            // Show playlists in reversed order (most recent at the top) with delete buttons
+                            ForEach(Array(playlistManager.userPlaylists.enumerated().reversed()), id: \.element.id) { index, playlist in
+                                HStack {
+                                    // Only show NavigationLink when not in edit mode
+                                    if !isEditMode {
+                                        NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager)
+                                            .environmentObject(roomManager)) {
+                                            PlaylistRowView(playlist: playlist, showArrow: false) // Don't show arrow in PlaylistRowView
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    } else {
+                                        // In edit mode, just show the playlist info without navigation
+                                        PlaylistRowView(playlist: playlist, showArrow: false)
+                                    }
+                                    
+                                    // Delete button (only show in edit mode)
+                                    if isEditMode {
+                                        Button(action: {
+                                            playlistToDelete = playlist
+                                            showingDeleteAlert = true
+                                        }) {
+                                            Image(systemName: "trash.fill")
+                                                .foregroundColor(.red)
+                                                .font(.system(size: 18))
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        .padding(.leading, 12)
+                                        .scaleEffect(1.1)
+                                        .transition(.scale.combined(with: .opacity))
+                                    }
                                 }
                                 .listRowBackground(Color.black)
                                 .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
+                                .padding(.vertical, 6)
                             }
                         }
                     } else {
@@ -159,10 +261,11 @@ struct PlaylistsView: View {
                             .padding(.vertical, 50)
                             .listRowBackground(Color.black)
                         } else if !playlistManager.searchedPlaylists.isEmpty {
-                            ForEach(playlistManager.searchedPlaylists.indices, id: \.self) { index in
-                                let playlist = playlistManager.searchedPlaylists[index]
-                                NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager)) {
-                                    PlaylistRowView(playlist: playlist)
+                            // Show searched playlists in reversed order (most recent at the top)
+                            ForEach(Array(playlistManager.searchedPlaylists.enumerated().reversed()), id: \.element.id) { index, playlist in
+                                NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager)
+                                    .environmentObject(roomManager)) {
+                                    PlaylistRowView(playlist: playlist, showArrow: false) // Don't show arrow in PlaylistRowView
                                 }
                                 .listRowBackground(Color.black)
                                 .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
@@ -189,6 +292,10 @@ struct PlaylistsView: View {
                     }
                 }
                 .listStyle(PlainListStyle())
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                    removal: .move(edge: .bottom).combined(with: .opacity)
+                ))
             }
         }
         .background(Color.black.ignoresSafeArea())
@@ -198,6 +305,22 @@ struct PlaylistsView: View {
         .sheet(isPresented: $showingCreatePlaylist) {
             CreatePlaylistView(playlistManager: playlistManager)
         }
+        .alert(isPresented: $showingDeleteAlert) {
+            Alert(
+                title: Text("Delete Playlist"),
+                message: Text("Are you sure you want to delete this playlist? This cannot be undone."),
+                primaryButton: .destructive(Text("Delete")) {
+                    if let playlist = playlistToDelete {
+                        playlistManager.deletePlaylist(playlistId: playlist.playlistId) { _ in
+                            // Optionally handle error/UI updates here
+                        }
+                    }
+                },
+                secondaryButton: .cancel {
+                    playlistToDelete = nil
+                }
+            )
+        }
     }
     
     private func searchPlaylists() {
@@ -205,8 +328,16 @@ struct PlaylistsView: View {
     }
 }
 
+// Updated PlaylistRowView with optional arrow
 struct PlaylistRowView: View {
     let playlist: Playlist
+    let showArrow: Bool
+    
+    // Default parameter for backwards compatibility
+    init(playlist: Playlist, showArrow: Bool = true) {
+        self.playlist = playlist
+        self.showArrow = showArrow
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -247,9 +378,12 @@ struct PlaylistRowView: View {
             
             Spacer()
             
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundColor(.gray)
+            // Only show arrow if showArrow is true
+            if showArrow {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+            }
         }
         .padding(.vertical, 4)
     }

@@ -4,55 +4,24 @@ struct QueueView: View {
     @EnvironmentObject var queueManager: QueueManager
     @EnvironmentObject var roomManager: RoomManager
     @State private var isRefreshing = false
+    @State private var showSearchView = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row
+            // Header row - Removed refresh button
             HStack {
                 Text("Current Queue")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                 Spacer()
-
-                // Refresh button
-                Button(action: {
-                    guard !isRefreshing else { return }
-                    
-                    // Add haptic feedback
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                    
-                    isRefreshing = true
-                    queueManager.fetchQueue {
-                        isRefreshing = false
-                        print("Queue refreshed")
-                    }
-                }) {
-                    Group {
-                        if isRefreshing {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.title2)
-                        }
-                    }
-                    .foregroundColor(.white)
-                    .frame(width: 20, height: 20)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                }
-                .disabled(isRefreshing)
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
 
             // Content based on queue state
             if queueManager.queue.isEmpty && !isRefreshing {
-                EmptyQueueView()
+                EmptyQueueView(showSearchView: $showSearchView)
             } else if queueManager.queueOrder.isEmpty && !queueManager.queue.isEmpty {
                 // Handle case where queue has data but order is missing
                 VStack(spacing: 16) {
@@ -84,11 +53,21 @@ struct QueueView: View {
                 }
             }
         }
+        .sheet(isPresented: $showSearchView) {
+            NavigationView {
+                SearchView()
+                    .environmentObject(queueManager)
+                    .environmentObject(roomManager)
+                    .navigationBarHidden(true)
+            }
+        }
     }
 }
 
 // MARK: - Empty Queue View
 struct EmptyQueueView: View {
+    @Binding var showSearchView: Bool
+    
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
@@ -109,10 +88,13 @@ struct EmptyQueueView: View {
                     .multilineTextAlignment(.center)
             }
             
-            // Add songs suggestion
+            // Add songs button - Now navigates to search view
             Button(action: {
-                // This could navigate to search or suggest adding songs
-                print("Navigate to search")
+                // Add haptic feedback
+                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                impactFeedback.impactOccurred()
+                
+                showSearchView = true
             }) {
                 HStack {
                     Image(systemName: "plus.circle.fill")
@@ -123,8 +105,13 @@ struct EmptyQueueView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(Color.blue)
+                .background(LinearGradient(
+                    gradient: Gradient(colors: [Color.purple, Color.blue]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ))
                 .cornerRadius(25)
+                .shadow(color: Color.purple.opacity(0.3), radius: 8, x: 0, y: 4)
             }
             
             Spacer()

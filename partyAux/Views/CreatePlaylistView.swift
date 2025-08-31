@@ -19,119 +19,159 @@ struct CreatePlaylistView: View {
         !playlistName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
-    private var buttonBackground: some View {
-        Group {
-            if !isFormValid || isCreating {
-                Color.gray.opacity(0.3)
-            } else {
-                LinearGradient(
-                    gradient: Gradient(colors: [.purple, .blue]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            }
-        }
-    }
-    
-    private var buttonShadowColor: Color {
-        isFormValid ? .purple.opacity(0.4) : .clear
-    }
-    
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                Spacer()
-                
-                // Icon
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(gradient: Gradient(colors: [.purple.opacity(0.6), .blue.opacity(0.6)]), startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 80, height: 80)
-                        .shadow(color: .purple.opacity(0.3), radius: 10, x: 0, y: 5)
+            VStack(spacing: 0) {
+                // Header section with playlist icon
+                VStack(spacing: 20) {
+                    Spacer()
                     
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 36))
-                        .foregroundColor(.white)
-                }
-                
-                // Title
-                Text("Create Playlist")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.textPrimary)
-                
-                // Name input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Playlist Name")
-                        .font(.headline)
-                        .foregroundColor(.textPrimary)
-                    
-                    TextField("Enter playlist name", text: $playlistName)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .focused($isTextFieldFocused)
-                        .submitLabel(.done)
-                        .onSubmit {
-                            createPlaylist()
-                        }
-                }
-                .padding(.horizontal)
-                
-                // Error message
-                if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                        .font(.subheadline)
-                        .padding(.horizontal)
-                }
-                
-                Spacer()
-                
-                // Create button
-                Button(action: createPlaylist) {
-                    HStack {
-                        if isCreating {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                            Text("Creating...")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        } else {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 16))
-                            Text("Create Playlist")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
+                    // Large playlist icon
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(LinearGradient(gradient: Gradient(colors: [.purple.opacity(0.6), .blue.opacity(0.6)]), startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 140, height: 140)
+                            .shadow(color: .purple.opacity(0.3), radius: 15, x: 0, y: 8)
+                        
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 56))
+                            .foregroundColor(.white)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(buttonBackground)
-                    .foregroundColor(.white)
-                    .cornerRadius(16)
-                    .shadow(color: buttonShadowColor, radius: 12, x: 0, y: 6)
+                    
+                    VStack(spacing: 8) {
+                        Text("Create New Playlist")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.textPrimary)
+                        
+                        Text("Organize your favorite songs")
+                            .font(.subheadline)
+                            .foregroundColor(.textSecondary)
+                    }
+                    
+                    Spacer()
                 }
-                .disabled(!isFormValid || isCreating)
-                .padding(.horizontal)
-                .padding(.bottom, 40)
+                .frame(maxHeight: .infinity)
+                .background(Color.black)
+                
+                // Form section
+                VStack(spacing: 24) {
+                    // Name input with modern styling
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Playlist Name")
+                            .font(.headline)
+                            .foregroundColor(.textPrimary)
+                        
+                        HStack {
+                            Image(systemName: "music.note")
+                                .foregroundColor(.purple)
+                                .font(.system(size: 16))
+                            
+                            TextField("Enter playlist name", text: $playlistName)
+                                .foregroundColor(.white)
+                                .focused($isTextFieldFocused)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    createPlaylist()
+                                }
+                        }
+                        .padding(16)
+                        .background(Color(red: 0.1, green: 0.1, blue: 0.12))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isTextFieldFocused ? Color.purple : Color.clear, lineWidth: 2)
+                        )
+                    }
+                    
+                    // Error message
+                    if let errorMessage = errorMessage {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.red)
+                            Text(errorMessage)
+                                .foregroundColor(.red)
+                                .font(.subheadline)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    
+                    // Create button
+                    Button(action: createPlaylist) {
+                        HStack(spacing: 12) {
+                            if isCreating {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.9)
+                                Text("Creating...")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                            } else {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 18))
+                                Text("Create Playlist")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(
+                            Group {
+                                if isFormValid && !isCreating {
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [.purple, .blue]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                } else {
+                                    Color.gray.opacity(0.3)
+                                }
+                            }
+                        )
+                        .foregroundColor(.white)
+                        .cornerRadius(16)
+                        .shadow(
+                            color: isFormValid && !isCreating ? .purple.opacity(0.4) : .clear,
+                            radius: 12,
+                            x: 0,
+                            y: 6
+                        )
+                    }
+                    .disabled(!isFormValid || isCreating)
+                    .scaleEffect(isFormValid && !isCreating ? 1.0 : 0.98)
+                    .animation(.easeInOut(duration: 0.2), value: isFormValid)
+                }
+                .padding(24)
+                .background(Color.black)
             }
             .background(Color.black.ignoresSafeArea())
-            .navigationTitle("New Playlist")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(
-                leading: Button("Cancel") {
-                    presentationMode.wrappedValue.dismiss()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                    .foregroundColor(.white)
                 }
-                .foregroundColor(.white),
-                trailing: Button("Create") {
-                    createPlaylist()
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        createPlaylist()
+                    }
+                    .foregroundColor(isFormValid && !isCreating ? .purple : .gray)
+                    .disabled(!isFormValid || isCreating)
+                    .font(.headline)
                 }
-                .foregroundColor(isFormValid ? .white : .gray)
-                .disabled(!isFormValid || isCreating)
-            )
+            }
         }
         .onAppear {
-            isTextFieldFocused = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isTextFieldFocused = true
+            }
         }
     }
     

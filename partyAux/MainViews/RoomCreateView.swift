@@ -5,7 +5,6 @@ struct RoomCreateJoinView: View {
     @FocusState private var isJoinCodeFocused: Bool
     @State private var bounceIndices: [Bool] = Array(repeating: false, count: 6)
     private let joinCodeLength = 6
-    @State private var selectedHomeTab = 0 // 0: Rooms, 1: My Playlists
     
     @EnvironmentObject var roomManager: RoomManager
     
@@ -14,57 +13,6 @@ struct RoomCreateJoinView: View {
     @State private var showCreatedRoom = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Tab selector
-            Picker("Home Tab", selection: $selectedHomeTab) {
-                Text("Rooms").tag(0)
-                Text("My Playlists").tag(1)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding(.horizontal)
-            .padding(.top)
-            
-            if selectedHomeTab == 0 {
-                // Original Room Create/Join View
-                roomsView
-            } else {
-                // My Playlists View
-                HomePlaylistsView(userData: roomManager.userData)
-            }
-        }
-        .background(Color.black.ignoresSafeArea())
-        .onTapGesture {
-            if selectedHomeTab == 0 {
-                isJoinCodeFocused = false
-            }
-        }
-        .onAppear {
-            roomManager.eventHandlers()
-        }
-        .onChange(of: roomManager.roomCode) { newRoomCode in
-            if !newRoomCode.isEmpty && isCreatingRoom {
-                withAnimation(.springy) {
-                    showCreatedRoom = true
-                    isCreatingRoom = false
-                }
-                
-                // Add success haptic feedback
-                let notificationFeedback = UINotificationFeedbackGenerator()
-                notificationFeedback.notificationOccurred(.success)
-            }
-        }
-        .onChange(of: roomManager.joinedRoom) { joined in
-            if joined {
-                isJoiningRoom = false
-                
-                // Add success haptic feedback
-                let notificationFeedback = UINotificationFeedbackGenerator()
-                notificationFeedback.notificationOccurred(.success)
-            }
-        }
-    }
-    
-    private var roomsView: some View {
         ZStack {
             LinearGradient.backgroundGradient
                 .ignoresSafeArea()
@@ -130,7 +78,7 @@ struct RoomCreateJoinView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(
-                                isCreatingRoom ? 
+                                isCreatingRoom ?
                                 LinearGradient(gradient: Gradient(colors: [Color.white.opacity(0.7)]), startPoint: .leading, endPoint: .trailing) :
                                 LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing)
                             )
@@ -303,6 +251,34 @@ struct RoomCreateJoinView: View {
                 .padding()
             }
         }
+        .background(Color.black.ignoresSafeArea())
+        .onTapGesture {
+            isJoinCodeFocused = false
+        }
+        .onAppear {
+            roomManager.eventHandlers()
+        }
+        .onChange(of: roomManager.roomCode) { newRoomCode in
+            if !newRoomCode.isEmpty && isCreatingRoom {
+                withAnimation(.springy) {
+                    showCreatedRoom = true
+                    isCreatingRoom = false
+                }
+                
+                // Add success haptic feedback
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.success)
+            }
+        }
+        .onChange(of: roomManager.joinedRoom) { joined in
+            if joined {
+                isJoiningRoom = false
+                
+                // Add success haptic feedback
+                let notificationFeedback = UINotificationFeedbackGenerator()
+                notificationFeedback.notificationOccurred(.success)
+            }
+        }
     }
     
     private func createRoom() {
@@ -365,7 +341,7 @@ struct RoomCodeDigitView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(
-                            isActive ? LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing) : 
+                            isActive ? LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing) :
                             LinearGradient(
                                 gradient: Gradient(colors: [isFilled ? Color.white : Color.appSurface]),
                                 startPoint: .leading,

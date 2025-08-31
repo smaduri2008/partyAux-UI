@@ -433,6 +433,7 @@ struct SongRowView: View {
     @Binding var animatedIndex: Int?
     let onTap: () -> Void
     let onLongPress: () -> Void
+    @State private var isPressed = false
     
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -477,38 +478,69 @@ struct SongRowView: View {
 
             Spacer()
 
-            HStack {
-                Button(action: {
-                    // Haptic feedback
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-
-                    // Animation trigger
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        animatedIndex = index
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            animatedIndex = nil
-                        }
-                    }
-
-                    onTap()
-                }) {
-                    Image(systemName: "plus.circle.fill")
-                        .resizable()
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(Color.purple)
-                }
+            // Plus button
+            Button(action: {
+                triggerHapticAndAnimation()
+                onTap()
+            }) {
+                Image(systemName: "plus.circle.fill")
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(Color.purple)
             }
+            .buttonStyle(PlainButtonStyle())
         }
         .padding(.vertical, 4)
+        .scaleEffect(isPressed ? 0.95 : 1.0)
         .scaleEffect(animatedIndex == index ? 0.9 : 1.0)
         .contentShape(Rectangle())
+        .onTapGesture {
+            triggerHapticAndAnimation()
+            onTap()
+        }
         .onLongPressGesture {
             let generator = UIImpactFeedbackGenerator(style: .heavy)
             generator.impactOccurred()
             onLongPress()
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isPressed = true
+                    }
+                }
+                .onEnded { _ in
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        isPressed = false
+                    }
+                }
+        )
+    }
+    
+    private func triggerHapticAndAnimation() {
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        // Press animation
+        withAnimation(.easeInOut(duration: 0.1)) {
+            isPressed = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeOut(duration: 0.2)) {
+                isPressed = false
+            }
+        }
+
+        // Plus button animation (existing functionality)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            animatedIndex = index
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                animatedIndex = nil
+            }
         }
     }
     

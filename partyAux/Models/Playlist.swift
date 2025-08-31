@@ -46,7 +46,7 @@ struct PlaylistSong: Identifiable, Codable, Equatable {
         self.title = dict["title"] as? String ?? ""
         self.artist = dict["artist"] as? String ?? ""
         self.duration = dict["duration"] as? String ?? ""
-        self.thumbnail = dict["thumbnail"] as? String ?? ""
+        self.thumbnail = dict["album_art"] as? String ?? ""
         self.videoId = dict["video_id"] as? String ?? ""
     }
     
@@ -56,7 +56,7 @@ struct PlaylistSong: Identifiable, Codable, Equatable {
             "title": title,
             "artist": artist,
             "duration": duration,
-            "thumbnail": thumbnail,
+            "album_art": thumbnail,
             "video_id": videoId
         ]
     }

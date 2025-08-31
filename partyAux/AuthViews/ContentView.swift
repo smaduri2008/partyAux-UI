@@ -56,6 +56,7 @@ struct ContentView: View {
             .navigationViewStyle(StackNavigationViewStyle())
         }
         .environmentObject(auth)
+        .environmentObject(roomManager) // Add this line to provide RoomManager to all views
         .onAppear {
             auth.loadJWT()
             updateViewState()
@@ -102,6 +103,7 @@ struct ContentView: View {
                 }
                 .tag(1)
                 .environmentObject(auth)
+                .environmentObject(roomManager) // Add this line
             
             
             // Settings Tab (Placeholder)
@@ -111,6 +113,7 @@ struct ContentView: View {
                 }
                 .tag(2)
                 .environmentObject(auth)
+                .environmentObject(roomManager) // Add this line if needed
         }
     }
     
@@ -138,32 +141,6 @@ struct ContentView: View {
         }
     }
 }
-
-// Placeholder Views for Library and Settings
-/*
-struct LibraryTab: View {
-    var body: some View {
-        VStack {
-            Text("Library")
-                .font(.title)
-                .padding()
-            Spacer()
-        }
-    }
-}
- 
-
-struct SettingsTab: View {
-    var body: some View {
-        VStack {
-            Text("Settings")
-                .font(.title)
-                .padding()
-            Spacer()
-        }
-    }
-}
- */
 
 #Preview {
     ContentView()

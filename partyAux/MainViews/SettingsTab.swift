@@ -4,6 +4,7 @@ struct SettingsTab: View {
     @EnvironmentObject var userAuth: UserAuth
     @State private var showProfileSettings = false
     @State private var showingLogoutAlert = false
+    @State private var showingAccountDeletion = false
 
     var body: some View {
         NavigationView {
@@ -27,6 +28,19 @@ struct SettingsTab: View {
                             Spacer()
                         }
                     }
+                    
+                    // Delete account button
+                    Button(action: {
+                        showingAccountDeletion = true
+                    }) {
+                        HStack {
+                            Image(systemName: "trash.circle.fill")
+                                .foregroundColor(.red)
+                            Text("Delete Account")
+                                .foregroundColor(.red)
+                            Spacer()
+                        }
+                    }
                 }
             }
             .navigationBarTitle("Settings", displayMode: .inline)
@@ -37,6 +51,10 @@ struct SettingsTab: View {
                 }
             } message: {
                 Text("Are you sure you want to log out?")
+            }
+            .sheet(isPresented: $showingAccountDeletion) {
+                AccountDeletionView()
+                    .environmentObject(userAuth)
             }
         }
     }

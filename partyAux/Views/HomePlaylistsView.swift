@@ -4,94 +4,131 @@
 //
 //  Created by GitHub Copilot on 8/27/25.
 //
-
+/*
 import SwiftUI
 
 struct HomePlaylistsView: View {
     @StateObject private var playlistManager: PlaylistManager
     @State private var showingCreatePlaylist = false
     @State private var animatedIndex: Int? = nil
-    
+    @State private var showingDeleteAlert = false
+    @State private var playlistToDelete: Playlist? = nil
+
     init(userData: UserAuth) {
         _playlistManager = StateObject(wrappedValue: PlaylistManager(userData: userData))
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("My Playlists")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.textPrimary)
-                
-                Spacer()
-                
-                Button(action: {
-                    showingCreatePlaylist = true
-                }) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top)
-            
-            // Content
-            if playlistManager.isLoading {
-                Spacer()
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
-                Spacer()
-            } else if let errorMessage = playlistManager.errorMessage {
-                Spacer()
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
-                        .foregroundColor(.red)
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    Text("My Playlists")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.textPrimary)
                     
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    Spacer()
                     
-                    Button("Retry") {
-                        playlistManager.fetchUserPlaylists()
+                    Button(action: {
+                        showingCreatePlaylist = true
+                    }) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white)
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.purple)
-                    .cornerRadius(8)
                 }
-                Spacer()
-            } else {
-                List {
-                    if playlistManager.userPlaylists.isEmpty {
-                        HomeEmptyPlaylistsView()
-                    } else {
-                        ForEach(playlistManager.userPlaylists.indices, id: \.self) { index in
-                            let playlist = playlistManager.userPlaylists[index]
-                            NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager)) {
-                                HomePlaylistRowView(playlist: playlist)
+                .padding(.horizontal)
+                .padding(.top)
+                
+                // Content
+                if playlistManager.isLoading {
+                    Spacer()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                    Spacer()
+                } else if let errorMessage = playlistManager.errorMessage {
+                    Spacer()
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 48))
+                            .foregroundColor(.red)
+                        
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Button("Retry") {
+                            playlistManager.fetchUserPlaylists()
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color.purple)
+                        .cornerRadius(8)
+                    }
+                    Spacer()
+                } else {
+                    List {
+                        if playlistManager.userPlaylists.isEmpty {
+                            HomeEmptyPlaylistsView()
+                        } else {
+                            // Show playlists in reversed order (most recent at the top)
+                            ForEach(Array(playlistManager.userPlaylists.enumerated().reversed()), id: \.element.id) { index, playlist in
+                                HStack {
+                                    NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager)) {
+                                        HomePlaylistRowView(playlist: playlist)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .listRowBackground(Color.black)
+                                    .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
+                                    /*
+                                    // Delete button
+                                    Button(action: {
+                                        playlistToDelete = playlist
+                                        showingDeleteAlert = true
+                                    }) {
+                                        Image(systemName: "trash.fill")
+                                            .foregroundColor(.red)
+                                    }
+                                    .buttonStyle(BorderlessButtonStyle())
+                                    .padding(.leading, 8)
+                                     */
+                                }
+                                .padding(.vertical, 4)
                             }
-                            .listRowBackground(Color.black)
-                            .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
                         }
                     }
+                    .listStyle(PlainListStyle())
                 }
-                .listStyle(PlainListStyle())
+            }
+            .background(Color.black.ignoresSafeArea())
+            .onAppear {
+                playlistManager.fetchUserPlaylists()
+            }
+            .sheet(isPresented: $showingCreatePlaylist) {
+                CreatePlaylistView(playlistManager: playlistManager)
+            }
+            .alert(isPresented: $showingDeleteAlert) {
+                Alert(
+                    title: Text("Delete Playlist"),
+                    message: Text("Are you sure you want to delete this playlist? This cannot be undone."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        if let playlist = playlistToDelete {
+                            playlistManager.deletePlaylist(playlistId: playlist.playlistId) { _ in
+                                // Optionally handle error/UI updates here
+                            }
+                        }
+                    },
+                    secondaryButton: .cancel {
+                        playlistToDelete = nil
+                    }
+                )
             }
         }
-        .background(Color.black.ignoresSafeArea())
-        .onAppear {
-            playlistManager.fetchUserPlaylists()
-        }
-        .sheet(isPresented: $showingCreatePlaylist) {
-            CreatePlaylistView(playlistManager: playlistManager)
-        }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 
@@ -167,4 +204,4 @@ struct HomeEmptyPlaylistsView: View {
         .padding(.vertical, 80)
         .listRowBackground(Color.black)
     }
-}
+}*/
