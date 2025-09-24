@@ -11,6 +11,21 @@ class RoomManager: ObservableObject{
     @Published var currentSong: [String: Any] = [:]
     @Published var joinedRoom: Bool = false
     @Published var roomHost: String = ""
+    @Published var hostPlayingOnly: Bool = false {
+        didSet {
+            if oldValue != hostPlayingOnly {
+                print("🔄 hostPlayingOnly changed from \(oldValue) to \(hostPlayingOnly)")
+                // Post notification for UI updates
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("HostPlayingOnlyChanged"),
+                        object: nil,
+                        userInfo: ["hostPlayingOnly": self.hostPlayingOnly]
+                    )
+                }
+            }
+        }
+    }
     
     @Published var roomMembers: [String] = [] {
         didSet {
@@ -29,7 +44,21 @@ class RoomManager: ObservableObject{
         }
     }
     
-    @Published var isCurrentUserHost: Bool = false
+    @Published var isCurrentUserHost: Bool = false {
+        didSet {
+            if oldValue != isCurrentUserHost {
+                print("🔄 isCurrentUserHost changed from \(oldValue) to \(isCurrentUserHost)")
+                // Post notification for audio control updates
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("HostStatusChanged"),
+                        object: nil,
+                        userInfo: ["isCurrentUserHost": self.isCurrentUserHost]
+                    )
+                }
+            }
+        }
+    }
     
     private var manager: SocketManager
     private var socket : SocketIOClient
@@ -41,14 +70,6 @@ class RoomManager: ObservableObject{
         manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
         socket = manager.defaultSocket
         print("RoomManager initialized")
-        
-        //userData.clearUserData()
-        /*
-        print("ROOMCODE: \(roomCode)")
-        print("EMAIL: \(userData.email)")
-        print("USERNAME: \(userData.username)")
-        print("JWT: \(userData.jwt)")
-         */
         
         updateHostStatus()
     }
@@ -69,41 +90,41 @@ class RoomManager: ObservableObject{
     }
     
     func createRoom() {
-            let url = userData.url + "/create-room"
-            guard let urlRequest = URL(string: url) else {return}
-            var request = URLRequest(url: urlRequest)
-            request.httpMethod = "POST"
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: ["jwt": userData.jwt, "max_downvotes": downvotes])
+        let url = userData.url + "/create-room"
+        guard let urlRequest = URL(string: url) else {return}
+        var request = URLRequest(url: urlRequest)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["jwt": userData.jwt, "max_downvotes": downvotes])
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data,
+                  let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let status = response["status"] as? String,
+                  let code = response["code"] as? String else {
+                print("❌ Could not create room")
+                return
+            }
             
-            URLSession.shared.dataTask(with: request) { data, response, error in
-                guard let data = data,
-                      let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let status = response["status"] as? String,
-                      let code = response["code"] as? String else {
-                    print("❌ Could not create room")
-                    return
+            DispatchQueue.main.async {
+                if status == "Room created successfully" {
+                    print("✅ Room created with code: \(code)")
+                    self.roomCode = code
+                    
+                    // Immediately set host status since we created the room
+                    self.roomHost = self.userData.email
+                    self.isCurrentUserHost = true
+                    print("🎉 Set as host immediately: \(self.userData.email)")
+                    
+                    self.createQueueManager()
+                    self.connect()
+                    
+                } else {
+                    print("❌ Room could not be created: \(status)")
                 }
-                
-                DispatchQueue.main.async {
-                    if status == "Room created successfully" {
-                        print("✅ Room created with code: \(code)")
-                        self.roomCode = code
-                        
-                        // Immediately set host status since we created the room
-                        self.roomHost = self.userData.email
-                        self.isCurrentUserHost = true
-                        print("🎉 Set as host immediately: \(self.userData.email)")
-                        
-                        self.createQueueManager()
-                        self.connect()
-                        
-                    } else {
-                        print("❌ Room could not be created: \(status)")
-                    }
-                }
-            }.resume()
-        }
+            }
+        }.resume()
+    }
     
     private func updateHostStatus() {
         let newHostStatus = !roomHost.isEmpty && !userData.email.isEmpty && roomHost == userData.email
@@ -136,7 +157,6 @@ class RoomManager: ObservableObject{
                 return
             }
             
-            // Print the raw response for debugging
             if let jsonString = String(data: data, encoding: .utf8) {
                 print("🔍 Raw room info response: \(jsonString)")
             }
@@ -148,7 +168,6 @@ class RoomManager: ObservableObject{
                     if status == "Room info retrieved" {
                         if let roomInfo = json["room_info"] as? [String: Any] {
                             DispatchQueue.main.async {
-                                // Parse host information
                                 if let hostDict = roomInfo["host"] as? [String: Any],
                                    let hostUser = hostDict["email"] as? String {
                                     let previousHost = self.roomHost
@@ -157,56 +176,41 @@ class RoomManager: ObservableObject{
                                     print("🏠 Host updated to: \(hostUser)")
                                 }
                                 
-                                // Parse users list
                                 if let usersArray = roomInfo["users"] as? [[String: Any]] {
                                     var memberEmails: [String] = []
                                     var emailToUsername: [String: String] = [:]
                                     
-                                    print("👥 Processing \(usersArray.count) users from server")
-                                    
                                     for userDict in usersArray {
                                         if let email = userDict["email"] as? String,
                                            let username = userDict["username"] as? String {
-                                            //if email != self.roomHost{
-                                                memberEmails.append(email)
-                                                emailToUsername[email] = username
-                                                print("  - \(username) (\(email))")
-                                            //}
+                                            memberEmails.append(email)
+                                            emailToUsername[email] = username
                                         }
                                     }
                                     
-                                    print("✅ Setting room members to: \(memberEmails)")
-                                    
-                                    // Force clear and update to ensure SwiftUI detects changes
                                     self.roomMembers.removeAll()
                                     self.roomMembersUsernames.removeAll()
                                     
                                     self.roomMembers = memberEmails
                                     self.roomMembersUsernames = emailToUsername
-                                    
-                                    // Force UI update
                                     self.objectWillChange.send()
-                                } else {
-                                    print("❌ No users array found in room info")
                                 }
                                 
-                                // Parse max_downvotes
                                 if let maxDownvotesValue = roomInfo["max_downvotes"] as? Int {
                                     self.maxDownvotes = maxDownvotesValue
                                     print("🎯 Max downvotes set to: \(maxDownvotesValue)")
-                                } else {
-                                    print("⚠️ No max_downvotes found in room info, using default")
+                                }
+                                
+                                // Parse host playing only setting
+                                if let hostOnly = roomInfo["host_playing_only"] as? Bool {
+                                    let previousValue = self.hostPlayingOnly
+                                    self.hostPlayingOnly = hostOnly
+                                    print("🎵 Host playing only updated: \(previousValue) -> \(hostOnly)")
                                 }
                             }
-                        } else {
-                            print("❌ No room_info found in response")
                         }
-                    } else {
-                        print("❌ Room info retrieval failed: \(status)")
                     }
                 }
-            } else {
-                print("❌ Failed to parse JSON response")
             }
         }.resume()
     }
@@ -234,15 +238,13 @@ class RoomManager: ObservableObject{
         socket.emit("join_room", body)
         print("✅ Joining room: \(roomCode)")
         self.joinedRoom = true
-        
         self.getRoomInfo()
-        
     }
     
     func joinExistingRoom(code: String) {
         print("🚪 Joining existing room with code: \(code)")
         self.roomCode = code
-        self.roomHost = "" // Reset host status when joining existing room
+        self.roomHost = ""
         self.isCurrentUserHost = false
         createQueueManager()
         connect()
@@ -255,13 +257,11 @@ class RoomManager: ObservableObject{
         let body: [String: Any] = ["jwt": jwt]
         socket.emit("leave_room", body)
         
-        // Clean up when leaving room
         self.joinedRoom = false
         self.queueManager = nil
         self.currentSong = [:]
         self.roomCode = ""
-        
-        // Disconnect socket
+        self.hostPlayingOnly = false
         disconnect()
     }
     
@@ -336,12 +336,8 @@ class RoomManager: ObservableObject{
         
         socket.on(clientEvent: .connect) { data, ack in
             print("✅ Socket connected")
-            // Automatically join room when connected (if we have a room code)
             if !self.roomCode.isEmpty {
                 self.joinRoom()
-                //self.getRoomInfo()
-            } else {
-                print("⚠️ Connected but no room code available")
             }
         }
         
@@ -349,6 +345,42 @@ class RoomManager: ObservableObject{
             print("❌ Socket disconnected")
             DispatchQueue.main.async {
                 self.joinedRoom = false
+            }
+        }
+        
+        // Listen for host playing only changes
+        socket.on("host_playing_only_changed") { data, ack in
+            print("🎵 host_playing_only_changed event received")
+            print("🎵 Raw socket data: \(data)")
+            
+            if let payload = data.first as? [String: Any] {
+                print("🎵 Socket payload: \(payload)")
+                
+                if let newValue = payload["host_playing_only"] as? Bool {
+                    print("🎵 Parsed host_playing_only: \(newValue)")
+                    DispatchQueue.main.async {
+                        let previousValue = self.hostPlayingOnly
+                        self.hostPlayingOnly = newValue
+                        print("🎵 Updated hostPlayingOnly: \(previousValue) -> \(newValue)")
+                        
+                        // Force UI update
+                        self.objectWillChange.send()
+                        
+                        // Post notification for immediate audio control update
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("AudioControlUpdateRequired"),
+                            object: nil,
+                            userInfo: [
+                                "hostPlayingOnly": newValue,
+                                "isCurrentUserHost": self.isCurrentUserHost
+                            ]
+                        )
+                    }
+                } else {
+                    print("❌ Could not parse host_playing_only from payload")
+                }
+            } else {
+                print("❌ Could not parse socket payload for host_playing_only_changed")
             }
         }
         

@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var youtubePlayer: YTPlayerView?
     @State private var currentView: ContentViewState = .loading
     @State private var selectedTab: Int = 0 // Added for TabView
+    @State private var showPlayerUI: Bool = true // Add this line
     
     enum ContentViewState {
         case loading
@@ -85,9 +86,9 @@ struct ContentView: View {
                 }
                 if roomManager.joinedRoom, let queueManager = roomManager.queueManager {
                     MusicPlayerView(
-                        youtubePlayer: youtubePlayer,
                         queueManager: queueManager,
-                        roomManager: roomManager
+                        roomManager: roomManager,
+                        showPlayerUI: $showPlayerUI
                     )
                 }
             }
@@ -114,6 +115,25 @@ struct ContentView: View {
                 .tag(2)
                 .environmentObject(auth)
                 .environmentObject(roomManager) // Add this line if needed
+        }
+        .onChange(of: selectedTab) { newTab in
+            // Control player UI visibility and background state
+            showPlayerUI = (newTab == 0)
+            
+            // Tell the queue manager about background state
+            if let queueManager = roomManager.queueManager {
+                queueManager.isInBackground = (newTab != 0)
+                
+                // When returning to room tab, ensure music continues
+                if newTab == 0 {
+                    // Small delay to ensure UI is ready, then check if we need to resume
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // The YouTube player should auto-resume if it was paused
+                        // This is handled by the YouTubePlayerView delegate
+                        print("Returned to room tab - music should continue playing")
+                    }
+                }
+            }
         }
     }
     

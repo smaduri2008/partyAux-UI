@@ -54,6 +54,9 @@ struct MusicPlayerView: View {
     @State private var isDisliked = false
 
     @ObservedObject var roomManager: RoomManager
+    
+    // Add binding to control visibility of the player UI
+    @Binding var showPlayerUI: Bool
    
     let playerVars: [String: Any] = [
         "playsinline": 1,
@@ -70,9 +73,6 @@ struct MusicPlayerView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient.backgroundGradient
-                .ignoresSafeArea()
-           
             // YouTube Player (Always Present, Hidden Off-Screen)
             YouTubePlayerView(
                 videoID: currentVideoID,
@@ -87,78 +87,84 @@ struct MusicPlayerView: View {
             .shadow(radius: 5)
             .offset(x: UIScreen.main.bounds.width, y: UIScreen.main.bounds.height)
             .zIndex(0)
-           
-            // Main Player View
-            if !isSearching && !isQueueVisible && !isMembersVisible && !isSettingsVisible {
-                MainPlayerView(
-                    albumArtURL: $albumArtURL,
-                    isPlaying: $isPlaying,
-                    isSearching: $isSearching,
-                    isQueueVisible: $isQueueVisible,
-                    isMembersVisible: $isMembersVisible,
-                    isSettingsVisible: $isSettingsVisible,
-                    showControls: $showControls,
-                    isLiked: $isLiked,
-                    isDisliked: $isDisliked,
-                    queueManager: queueManager,
-                    roomManager: roomManager,
-                    togglePlayPause: togglePlayPause,
-                    playCurrentSong: playCurrentSong,
-                    skipToNext: skipToNext,
-                    toggleLike: toggleLike,
-                    toggleDislike: toggleDislike
-                )
-                .transition(.asymmetric(
-                    insertion: .move(edge: .leading).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
-                .zIndex(1)
-            }
-           
-            // Search View Overlay
-            if isSearching {
-                SearchOverlayView(isSearching: $isSearching)
-                    .environmentObject(queueManager)
-                    .environmentObject(roomManager)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-                    .zIndex(2)
-            }
-           
-            // Queue View Overlay
-            if isQueueVisible {
-                QueueOverlayView(isQueueVisible: $isQueueVisible)
-                    .environmentObject(queueManager)
-                    .environmentObject(roomManager)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    ))
-                    .zIndex(2)
-            }
             
-            // Members View Overlay
-            if isMembersVisible {
-                MembersOverlayView(isMembersVisible: $isMembersVisible)
-                    .environmentObject(roomManager)
+            // Only show UI when showPlayerUI is true
+            if showPlayerUI {
+                LinearGradient.backgroundGradient
+                    .ignoresSafeArea()
+                
+                // Main Player View
+                if !isSearching && !isQueueVisible && !isMembersVisible && !isSettingsVisible {
+                    MainPlayerView(
+                        albumArtURL: $albumArtURL,
+                        isPlaying: $isPlaying,
+                        isSearching: $isSearching,
+                        isQueueVisible: $isQueueVisible,
+                        isMembersVisible: $isMembersVisible,
+                        isSettingsVisible: $isSettingsVisible,
+                        showControls: $showControls,
+                        isLiked: $isLiked,
+                        isDisliked: $isDisliked,
+                        queueManager: queueManager,
+                        roomManager: roomManager,
+                        togglePlayPause: togglePlayPause,
+                        playCurrentSong: playCurrentSong,
+                        skipToNext: skipToNext,
+                        toggleLike: toggleLike,
+                        toggleDislike: toggleDislike
+                    )
                     .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
                     ))
-                    .zIndex(2)
-            }
-            
-            // Settings View Overlay
-            if isSettingsVisible {
-                SettingsOverlayView(isSettingsVisible: $isSettingsVisible)
-                    .environmentObject(roomManager)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-                    .zIndex(2)
+                    .zIndex(1)
+                }
+               
+                // Search View Overlay
+                if isSearching {
+                    SearchOverlayView(isSearching: $isSearching)
+                        .environmentObject(queueManager)
+                        .environmentObject(roomManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                        .zIndex(2)
+                }
+               
+                // Queue View Overlay
+                if isQueueVisible {
+                    QueueOverlayView(isQueueVisible: $isQueueVisible)
+                        .environmentObject(queueManager)
+                        .environmentObject(roomManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                        .zIndex(2)
+                }
+                
+                // Members View Overlay
+                if isMembersVisible {
+                    MembersOverlayView(isMembersVisible: $isMembersVisible)
+                        .environmentObject(roomManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                        .zIndex(2)
+                }
+                
+                // Settings View Overlay
+                if isSettingsVisible {
+                    SettingsOverlayView(isSettingsVisible: $isSettingsVisible)
+                        .environmentObject(roomManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                        .zIndex(2)
+                }
             }
         }
         .animation(.springy, value: isSearching)
@@ -189,6 +195,29 @@ struct MusicPlayerView: View {
         }
         .onChange(of: songCurrentlyPlaying) { isPlaying in
             print("🎵 songCurrentlyPlaying changed to: \(isPlaying)")
+        }
+        // Enhanced logging for host playing only changes
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("HostPlayingOnlyChanged"))) { notification in
+            print("🔧 [MusicPlayerView] Received HostPlayingOnlyChanged notification")
+            print("🔧 [MusicPlayerView] Notification userInfo: \(notification.userInfo ?? [:])")
+            if let hostPlayingOnly = notification.userInfo?["hostPlayingOnly"] as? Bool {
+                print("🔧 [MusicPlayerView] HostPlayingOnly value from notification: \(hostPlayingOnly)")
+                print("🔧 [MusicPlayerView] Current roomManager.hostPlayingOnly: \(roomManager.hostPlayingOnly)")
+                print("🔧 [MusicPlayerView] Current user is host: \(roomManager.isCurrentUserHost)")
+                
+                // Additional logging about what this means for the current user
+                if hostPlayingOnly {
+                    if roomManager.isCurrentUserHost {
+                        print("🔧 [MusicPlayerView] Audio should be ENABLED for this user (host)")
+                    } else {
+                        print("🔧 [MusicPlayerView] Audio should be DISABLED for this user (non-host)")
+                    }
+                } else {
+                    print("🔧 [MusicPlayerView] Audio should be ENABLED for all users")
+                }
+            } else {
+                print("🔧 [MusicPlayerView] No hostPlayingOnly value found in notification")
+            }
         }
     }
     
@@ -527,6 +556,8 @@ struct QueueOverlayView: View {
 // MARK: - Settings Overlay View
 struct SettingsOverlayView: View {
     @Binding var isSettingsVisible: Bool
+    @EnvironmentObject var userAuth: UserAuth
+    @EnvironmentObject var roomManager: RoomManager
     
     var body: some View {
         VStack(spacing: 0) {
@@ -568,6 +599,8 @@ struct SettingsOverlayView: View {
             .padding(.top, 10)
            
             SettingsView()
+                .environmentObject(userAuth)
+                .environmentObject(roomManager)
         }
         .background(LinearGradient.backgroundGradient.ignoresSafeArea())
     }
@@ -1069,10 +1102,10 @@ struct CurrentSongDownvoteInfo: View {
     var body: some View {
         HStack(spacing: 12) {
             // Warning icon
-            Image(systemName: warningLevel == 2 ? "exclamationmark.triangle.fill" : 
+            Image(systemName: warningLevel == 2 ? "exclamationmark.triangle.fill" :
                              warningLevel == 1 ? "exclamationmark.circle.fill" : "info.circle.fill")
                 .font(.system(size: 16))
-                .foregroundColor(warningLevel == 2 ? .red : 
+                .foregroundColor(warningLevel == 2 ? .red :
                                warningLevel == 1 ? .orange : .blue)
             
             // Progress bar
@@ -1087,7 +1120,7 @@ struct CurrentSongDownvoteInfo: View {
                     Text("\(downvotes)/\(maxDownvotes)")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundColor(warningLevel == 2 ? .red : 
+                        .foregroundColor(warningLevel == 2 ? .red :
                                        warningLevel == 1 ? .orange : .textSecondary)
                 }
                 
@@ -1101,9 +1134,9 @@ struct CurrentSongDownvoteInfo: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(LinearGradient(
                                 gradient: Gradient(colors: [
-                                    warningLevel == 2 ? .red : 
+                                    warningLevel == 2 ? .red :
                                     warningLevel == 1 ? .orange : .blue,
-                                    warningLevel == 2 ? .red.opacity(0.7) : 
+                                    warningLevel == 2 ? .red.opacity(0.7) :
                                     warningLevel == 1 ? .orange.opacity(0.7) : .blue.opacity(0.7)
                                 ]),
                                 startPoint: .leading,

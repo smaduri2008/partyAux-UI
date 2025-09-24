@@ -301,4 +301,8 @@ class QueueManager: ObservableObject {
             print("⚠️ Duplicate IDs found in queue order: \(duplicates)")
         }
     }
+    // Add this method to be called when the app state changes
+        func handleAppStateChange(isBackground: Bool) {
+            self.isInBackground = isBackground
+        }
 }
