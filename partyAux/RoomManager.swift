@@ -27,6 +27,14 @@ class RoomManager: ObservableObject{
         }
     }
     
+    @Published var autoplayEnabled: Bool = false {
+        didSet {
+            if oldValue != autoplayEnabled {
+                print("🔄 autoplayEnabled changed from \(oldValue) to \(autoplayEnabled)")
+            }
+        }
+    }
+    
     @Published var roomMembers: [String] = [] {
         didSet {
             print("🔄 roomMembers updated: \(roomMembers)")
@@ -398,10 +406,34 @@ class RoomManager: ObservableObject{
                 DispatchQueue.main.async {
                     self.queueManager?.fetchQueue {
                         print("🔄 Queue refreshed after current song change")
+                        // Check autoplay after refreshing queue
+                        DispatchQueue.main.async {
+                            if let queueManager = self.queueManager {
+                                queueManager.checkAndTriggerAutoplay(roomManager: self)
+                            }
+                        }
                     }
                     self.currentSong = songDict
                     self.queueManager?.currentSong = songDict
                     print("✅ Updated current song: \(songDict)")
+                }
+            } else {
+                // If no song data (empty/null song), store current song as last played before clearing
+                DispatchQueue.main.async {
+                    // Store current song as last played if it exists
+                    if let queueManager = self.queueManager, !queueManager.currentSong.isEmpty {
+                        queueManager.lastPlayedSong = queueManager.currentSong
+                        print("📀 Stored last played song from current_song event: \(queueManager.currentSong["title"] as? String ?? "Unknown")")
+                    }
+                    
+                    self.currentSong = [:]
+                    self.queueManager?.currentSong = [:]
+                    print("✅ Cleared current song")
+                    
+                    // Check if we should trigger autoplay when there's no current song
+                    if let queueManager = self.queueManager {
+                        queueManager.checkAndTriggerAutoplay(roomManager: self)
+                    }
                 }
             }
         }
@@ -412,6 +444,11 @@ class RoomManager: ObservableObject{
                 // Remove first song from queue without full refresh
                 self.queueManager?.removeFirstSongFromQueue()
                 print("🔄 Removed head song from queue")
+                
+                // Check if we should trigger autoplay after removing the song
+                if let queueManager = self.queueManager {
+                    queueManager.checkAndTriggerAutoplay(roomManager: self)
+                }
             }
         }
         
@@ -441,11 +478,22 @@ class RoomManager: ObservableObject{
                     // Remove specific song without affecting order of other songs
                     self.queueManager?.removeSongFromQueue(removedUuid)
                     print("🔄 Removed song \(removedUuid) from queue")
+                    
+                    // Check if we should trigger autoplay after removing the song
+                    if let queueManager = self.queueManager {
+                        queueManager.checkAndTriggerAutoplay(roomManager: self)
+                    }
                 }
             } else {
                 // Fallback to full refresh if we don't have the UUID
                 self.queueManager?.fetchQueue {
                     print("🔄 Queue updated after song removal (fallback)")
+                    // Check autoplay after queue refresh
+                    DispatchQueue.main.async {
+                        if let queueManager = self.queueManager {
+                            queueManager.checkAndTriggerAutoplay(roomManager: self)
+                        }
+                    }
                 }
             }
         }
@@ -521,6 +569,11 @@ class RoomManager: ObservableObject{
                     // Remove specific song without affecting order of other songs
                     self.queueManager?.removeSongFromQueue(deletedUuid)
                     print("🔄 Removed song \(deletedUuid) due to downvotes")
+                    
+                    // Check if we should trigger autoplay after removing the song
+                    if let queueManager = self.queueManager {
+                        queueManager.checkAndTriggerAutoplay(roomManager: self)
+                    }
                 }
             }
         }

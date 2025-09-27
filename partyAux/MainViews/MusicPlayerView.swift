@@ -79,6 +79,7 @@ struct MusicPlayerView: View {
                 playerVars: playerVars,
                 playerInstance: $youtubePlayer,
                 queueManager: queueManager,
+                roomManager: roomManager,
                 playerReady: $playerReady,
                 songCurrentlyPlaying: $songCurrentlyPlaying
             )
@@ -196,29 +197,6 @@ struct MusicPlayerView: View {
         .onChange(of: songCurrentlyPlaying) { isPlaying in
             print("🎵 songCurrentlyPlaying changed to: \(isPlaying)")
         }
-        // Enhanced logging for host playing only changes
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("HostPlayingOnlyChanged"))) { notification in
-            print("🔧 [MusicPlayerView] Received HostPlayingOnlyChanged notification")
-            print("🔧 [MusicPlayerView] Notification userInfo: \(notification.userInfo ?? [:])")
-            if let hostPlayingOnly = notification.userInfo?["hostPlayingOnly"] as? Bool {
-                print("🔧 [MusicPlayerView] HostPlayingOnly value from notification: \(hostPlayingOnly)")
-                print("🔧 [MusicPlayerView] Current roomManager.hostPlayingOnly: \(roomManager.hostPlayingOnly)")
-                print("🔧 [MusicPlayerView] Current user is host: \(roomManager.isCurrentUserHost)")
-                
-                // Additional logging about what this means for the current user
-                if hostPlayingOnly {
-                    if roomManager.isCurrentUserHost {
-                        print("🔧 [MusicPlayerView] Audio should be ENABLED for this user (host)")
-                    } else {
-                        print("🔧 [MusicPlayerView] Audio should be DISABLED for this user (non-host)")
-                    }
-                } else {
-                    print("🔧 [MusicPlayerView] Audio should be ENABLED for all users")
-                }
-            } else {
-                print("🔧 [MusicPlayerView] No hostPlayingOnly value found in notification")
-            }
-        }
     }
     
     // MARK: - Helper Methods
@@ -329,7 +307,7 @@ struct MusicPlayerView: View {
    
     func skipToNext() {
         youtubePlayer?.seek(toSeconds: 1000, allowSeekAhead: false)
-        queueManager.nextSong {
+        queueManager.nextSongWithAutoplayCheck(roomManager: roomManager) {
             playCurrentSong()
         }
     }
@@ -893,6 +871,19 @@ struct SongInfoView: View {
                     .foregroundColor(.textTertiary)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
+            }
+            
+            // Added by information
+            if let addedBy = currentSong["added_by"] as? String, !addedBy.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.textTertiary)
+                    Text("Added by \(addedBy)")
+                        .font(.caption)
+                        .foregroundColor(.textTertiary)
+                }
+                .padding(.top, 4)
             }
         }
         .animation(.smooth, value: currentSong["title"] as? String ?? "")

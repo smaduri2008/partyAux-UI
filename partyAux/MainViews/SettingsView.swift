@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var playOnHostOnly = false
+    @State private var autoplayEnabled = false
     @State private var maxDownvotes = 3
     @State private var isUpdatingDownvotes = false
     @State private var isUpdatingHostOnly = false
@@ -62,6 +63,41 @@ struct SettingsView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(roomManager.isCurrentUserHost ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
                             )
+                        }
+                        
+                        Divider()
+                            .padding(.vertical, 8)
+                        
+                        Toggle(isOn: $autoplayEnabled) {
+                            HStack {
+                                Image(systemName: "repeat.circle.fill")
+                                    .foregroundColor(.blue)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Autoplay")
+                                        .font(.callout)
+                                        .fontWeight(.medium)
+                                    Text("Automatically add similar songs when the queue is empty.")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .disabled(!roomManager.isCurrentUserHost)
+                        .onChange(of: autoplayEnabled) { newValue in
+                            updateAutoplay(newValue)
+                        }
+                        
+                        if !roomManager.isCurrentUserHost {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.caption)
+                                Text("Only the host can change this setting")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.top, 4)
                         }
                     }
                     .padding(.vertical, 4)
@@ -141,7 +177,8 @@ struct SettingsView: View {
                 // Load current room's settings when view appears
                 maxDownvotes = roomManager.maxDownvotes
                 playOnHostOnly = roomManager.hostPlayingOnly
-                print("🔧 Settings loaded: maxDownvotes=\(maxDownvotes), hostPlayingOnly=\(playOnHostOnly)")
+                autoplayEnabled = roomManager.autoplayEnabled
+                print("🔧 Settings loaded: maxDownvotes=\(maxDownvotes), hostPlayingOnly=\(playOnHostOnly), autoplay=\(autoplayEnabled)")
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("HostPlayingOnlyChanged"))) { notification in
                 if let hostPlayingOnly = notification.userInfo?["hostPlayingOnly"] as? Bool {
@@ -361,5 +398,24 @@ struct SettingsView: View {
                 }
             }
         }.resume()
+    }
+    
+    private func updateAutoplay(_ newValue: Bool) {
+        guard !roomManager.roomCode.isEmpty else {
+            print("❌ Room code is empty")
+            return
+        }
+        
+        guard roomManager.isCurrentUserHost else {
+            print("❌ Only host can change autoplay setting")
+            // Revert the toggle
+            autoplayEnabled = roomManager.autoplayEnabled
+            return
+        }
+        
+        print("🔧 Updating autoplay to: \(newValue)")
+        
+        // Update room manager state immediately for responsive UI
+        roomManager.autoplayEnabled = newValue
     }
 }

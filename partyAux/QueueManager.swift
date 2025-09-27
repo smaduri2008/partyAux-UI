@@ -5,6 +5,7 @@ class QueueManager: ObservableObject {
     @Published var currentSong: [String: Any] = [:]
     @Published var queue: [String: [String:Any]] = [:]
     @Published var queueOrder: [String] = []
+    @Published var lastPlayedSong: [String: Any] = [:]
     
     @Published var songCurrentlyPlaying: Bool = false
     
@@ -136,7 +137,12 @@ class QueueManager: ObservableObject {
     
     func removeFirstSongFromQueue() {
         DispatchQueue.main.async {
-            if let firstSongUuid = self.queueOrder.first {
+            if let firstSongUuid = self.queueOrder.first,
+               let songData = self.queue[firstSongUuid] {
+                // Store the song before removing it
+                self.lastPlayedSong = songData
+                print("📀 Stored last played song: \(songData["title"] as? String ?? "Unknown")")
+                
                 self.queue.removeValue(forKey: firstSongUuid)
                 self.queueOrder.removeFirst()
                 print("✅ Removed first song \(firstSongUuid) from queue")
@@ -204,6 +210,13 @@ class QueueManager: ObservableObject {
     func nextSong(completion: @escaping () -> Void) {
         print("jwt: \(self.jwt_auth)")
         print("room code: \(self.room)")
+        
+        // Store current song as last played before transitioning
+        if !currentSong.isEmpty {
+            lastPlayedSong = currentSong
+            print("💿 Stored last played song from nextSong: \(currentSong["title"] as? String ?? "Unknown")")
+        }
+        
         QueueManager.sendPostRequest(body: ["jwt": self.jwt_auth, "room": self.room], endpoint: "/next-song") { result in
             if let result = result {
                 DispatchQueue.main.async {
@@ -213,6 +226,17 @@ class QueueManager: ObservableObject {
                 print("Failed to go to next song")
                 completion()
             }
+        }
+    }
+    
+    func nextSongWithAutoplayCheck(roomManager: RoomManager, completion: @escaping () -> Void) {
+        print("⏭️ Skipping song with autoplay check")
+        nextSong {
+            // After skipping, check if we should trigger autoplay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.checkAndTriggerAutoplay(roomManager: roomManager)
+            }
+            completion()
         }
     }
 
@@ -227,6 +251,119 @@ class QueueManager: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            // 🔥 Network Error
+            if let error = error {
+                print("❌ Network error: \(error.localizedDescription)")
+                completion(nil)
+                return
+            }
+
+            // 🔍 HTTP Response (to get status code and headers)
+            if let httpResponse = response as? HTTPURLResponse {
+                print("✅ Response Status Code: \(httpResponse.statusCode)")
+                print("📦 Headers: \(httpResponse.allHeaderFields)")
+            }
+
+            // 📥 Check if data exists
+            guard let data = data else {
+                print("❌ No data received")
+                completion(nil)
+                return
+            }
+
+            // 🧪 Debug raw response body
+            if let rawString = String(data: data, encoding: .utf8) {
+                print("📄 Raw response body: \(rawString)")
+            }
+
+            // 🧠 Try JSON decoding
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("✅ Parsed JSON: \(json)")
+                    completion(json)
+                } else {
+                    print("❌ JSON was not a dictionary")
+                    completion(nil)
+                }
+            } catch {
+                print("❌ JSON parsing failed: \(error.localizedDescription)")
+                completion(nil)
+            }
+        }
+
+        task.resume()
+    }
+    
+    func triggerAutoplay(completion: @escaping (Bool) -> Void) {
+        guard !lastPlayedSong.isEmpty else {
+            print("❌ Cannot trigger autoplay: No last played song available")
+            completion(false)
+            return
+        }
+        
+        // Create the request body with the complex structure
+        let lastSongData: [String: Any] = [
+            "artist": lastPlayedSong["artist"] as? String ?? "",
+            "album": lastPlayedSong["album"] as? String ?? "",
+            "title": lastPlayedSong["title"] as? String ?? "",
+            "url": lastPlayedSong["url"] as? String ?? "",
+            "album_art": lastPlayedSong["album_art"] as? String ?? "",
+            "duration": lastPlayedSong["duration"] as? String ?? ""
+        ]
+        
+        let requestBody: [String: Any] = [
+            "jwt": self.jwt_auth,
+            "room": self.room,
+            "last_song": lastSongData
+        ]
+        
+        QueueManager.sendComplexPostRequest(body: requestBody, endpoint: "/add-song-autoplay") { result in
+            DispatchQueue.main.async {
+                if let result = result {
+                    print("🎵 AUTOPLAY API RESPONSE:")
+                    print("🎵 Full response: \(result)")
+                    
+                    // Log specific fields if they exist
+                    if let status = result["status"] as? String {
+                        print("🎵 Status: \(status)")
+                    }
+                    if let message = result["message"] as? String {
+                        print("🎵 Message: \(message)")
+                    }
+                    if let song = result["song"] as? [String: Any] {
+                        print("🎵 Added song: \(song)")
+                    }
+                    
+                    print("✅ Autoplay request successful")
+                    completion(true)
+                } else {
+                    print("❌ AUTOPLAY API FAILED - No response received")
+                    completion(false)
+                }
+            }
+        }
+    }
+    
+    class func sendComplexPostRequest(body: [String: Any], endpoint: String, completion: @escaping ([String: Any]?) -> Void) {
+        guard let url = URL(string: "http://35.208.64.59" + endpoint) else {
+            print("❌ Invalid URL: http://35.208.64.59\(endpoint)")
+            completion(nil)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            print("❌ Error encoding request body: \(error)")
+            completion(nil)
+            return
+        }
 
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             // 🔥 Network Error
@@ -305,4 +442,63 @@ class QueueManager: ObservableObject {
         func handleAppStateChange(isBackground: Bool) {
             self.isInBackground = isBackground
         }
+    
+    func checkAndTriggerAutoplay(roomManager: RoomManager) {
+        // Only trigger autoplay if:
+        // 1. Autoplay is enabled
+        // 2. User is the host
+        // 3. Queue is empty
+        // 4. No song is currently playing
+        
+        print("🔄 Checking autoplay conditions...")
+        print("🔄 - Autoplay enabled: \(roomManager.autoplayEnabled)")
+        print("🔄 - Is host: \(roomManager.isCurrentUserHost)")
+        print("🔄 - Queue empty: \(queueOrder.isEmpty) (count: \(queueOrder.count))")
+        print("🔄 - Song playing: \(songCurrentlyPlaying)")
+        print("🔄 - Current song empty: \(currentSong.isEmpty || (currentSong["title"] as? String ?? "").isEmpty)")
+        print("🔄 - Last played song available: \(!lastPlayedSong.isEmpty)")
+        if !lastPlayedSong.isEmpty {
+            print("🔄 - Last played song: \(lastPlayedSong["title"] as? String ?? "Unknown")")
+        }
+        
+        guard roomManager.autoplayEnabled else {
+            print("🔄 Autoplay not enabled, skipping")
+            return
+        }
+        
+        guard roomManager.isCurrentUserHost else {
+            print("🔄 User is not host, skipping autoplay")
+            return
+        }
+        
+        guard queueOrder.isEmpty else {
+            print("🔄 Queue is not empty (\(queueOrder.count) songs), skipping autoplay")
+            return
+        }
+        
+        guard !songCurrentlyPlaying else {
+            print("🔄 Song currently playing, skipping autoplay")
+            return
+        }
+        
+        guard currentSong.isEmpty || (currentSong["title"] as? String ?? "").isEmpty else {
+            print("🔄 Current song exists, skipping autoplay")
+            return
+        }
+        
+        print("🎵 All conditions met, triggering autoplay...")
+        triggerAutoplay { success in
+            if success {
+                print("✅ Autoplay triggered successfully")
+                // Optionally refresh the queue after a short delay to see the new song
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.fetchQueue {
+                        print("🔄 Queue refreshed after autoplay")
+                    }
+                }
+            } else {
+                print("❌ Autoplay failed")
+            }
+        }
+    }
 }

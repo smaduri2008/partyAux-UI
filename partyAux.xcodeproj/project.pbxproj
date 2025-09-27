@@ -34,7 +34,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		9F65547C2E3CF1FD00770F02 /* Exceptions for "partyAux" folder in "partyAux" target */ = {
+		9FD4F98C2E8637E0007E5DE4 /* Exceptions for "partyAux" folder in "partyAux" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -47,7 +47,7 @@
 		392AD13D2E21767C0036DD96 /* partyAux */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				9F65547C2E3CF1FD00770F02 /* Exceptions for "partyAux" folder in "partyAux" target */,
+				9FD4F98C2E8637E0007E5DE4 /* Exceptions for "partyAux" folder in "partyAux" target */,
 			);
 			path = partyAux;
 			sourceTree = "<group>";
@@ -422,11 +422,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MCPFAFRPU2;
+				DEVELOPMENT_TEAM = 363964K2LM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = partyAux/Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -439,7 +438,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = personal.partyAux292;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "/Users/sanskaarsrivastava/Desktop/partyAux-UI5/partyAux/Classes/partyAux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "partyAux/Classes/partyAux-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -452,11 +451,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MCPFAFRPU2;
+				DEVELOPMENT_TEAM = 363964K2LM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = partyAux/Info.plist;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -469,7 +467,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = personal.partyAux292;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "/Users/sanskaarsrivastava/Desktop/partyAux-UI5/partyAux/Classes/partyAux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "partyAux/Classes/partyAux-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
