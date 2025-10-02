@@ -42,6 +42,28 @@ struct SettingsTab: View {
                         }
                     }
                 }
+
+                Section(header: Text("About")) {
+                    HStack {
+                        Text("PartyAux")
+                        Spacer()
+                        Text("Version 1.0.0")
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Privacy Policy Link
+                    Link(destination: URL(string: "https://www.termsfeed.com/live/15f4c5b4-9fdc-4b6a-966a-b25d21eeecc5")!) {
+                        HStack {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.blue)
+                            Text("Privacy Policy")
+                                .foregroundColor(.blue)
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
             }
             .navigationBarTitle("Settings", displayMode: .inline)
             .alert("Log Out", isPresented: $showingLogoutAlert) {

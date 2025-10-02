@@ -34,15 +34,15 @@ struct YouTubePlayerView: UIViewRepresentable {
     class Coordinator: NSObject, YTPlayerViewDelegate {
         var parent: YouTubePlayerView
         var currentVideoID: String = ""
-        var shouldBePlaying: Bool = false // Track intended playing state
-        var isManuallyMuted: Bool = false // Track if muted by audio control
-        var isHostPlayingOnlyPaused: Bool = false // Track if paused due to host-only mode
+        var shouldBePlaying: Bool = false
+        var isManuallyMuted: Bool = false
+        var isHostPlayingOnlyPaused: Bool = false
+        var isManuallyPausedByUser: Bool = false // NEW: Track manual user pauses
         
         init(_ parent: YouTubePlayerView) {
             self.parent = parent
             super.init()
             
-            // Listen for hostPlayingOnly changes
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(handleHostPlayingOnlyChanged),
@@ -72,16 +72,14 @@ struct YouTubePlayerView: UIViewRepresentable {
             let isHost = parent.roomManager.isCurrentUserHost
             
             if hostPlayingOnly && !isHost {
-                // Non-host and host-only mode is active: pause the player
                 print("🎵 [YouTubePlayerView] Pausing player for non-host (host-only mode active)")
                 isHostPlayingOnlyPaused = true
                 playerView.pauseVideo()
             } else {
-                // Host or host-only mode is off: resume if previously paused by host-only mode
                 if isHostPlayingOnlyPaused {
                     print("🎵 [YouTubePlayerView] Resuming player (host-only mode off or user is host)")
                     isHostPlayingOnlyPaused = false
-                    if shouldBePlaying {
+                    if shouldBePlaying && !isManuallyPausedByUser {
                         playerView.playVideo()
                     }
                 }
@@ -92,14 +90,13 @@ struct YouTubePlayerView: UIViewRepresentable {
             print("Player is ready - autoplay should start")
             parent.playerReady = true
             shouldBePlaying = true
+            isManuallyPausedByUser = false // Reset manual pause on new video
             
-            // Check if we need to apply host-only mode restrictions
             updatePlayerForHostOnlyMode(
-                playerView: playerView, 
+                playerView: playerView,
                 hostPlayingOnly: parent.roomManager.hostPlayingOnly
             )
             
-            // Apply any pending audio control settings
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.parent.onPlayerReady?()
             }
@@ -112,6 +109,7 @@ struct YouTubePlayerView: UIViewRepresentable {
                     print("✅ Video is playing")
                     self.parent.songCurrentlyPlaying = true
                     self.shouldBePlaying = true
+                    self.isManuallyPausedByUser = false // Clear manual pause when playing starts
                     self.parent.onPlayerReady?()
                     
                 case .paused:
@@ -124,8 +122,14 @@ struct YouTubePlayerView: UIViewRepresentable {
                         return
                     }
                     
-                    // Always try to resume if we should be playing, unless manually paused
-                    if self.shouldBePlaying && !self.isManuallyPaused() {
+                    // Don't auto-resume if manually paused by user
+                    if self.isManuallyPausedByUser {
+                        print("🎵 Staying paused - manually paused by user")
+                        return
+                    }
+                    
+                    // Auto-resume if we should be playing and wasn't manually paused
+                    if self.shouldBePlaying {
                         print("🔄 Auto-resuming paused video (shouldBePlaying = true)")
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             playerView.playVideo()
@@ -136,8 +140,8 @@ struct YouTubePlayerView: UIViewRepresentable {
                     print("🏁 Video ended")
                     self.parent.songCurrentlyPlaying = false
                     self.shouldBePlaying = false
+                    self.isManuallyPausedByUser = false // Reset for next song
                     
-                    // Store current song as last played before clearing it
                     if !self.parent.queueManager.currentSong.isEmpty {
                         self.parent.queueManager.lastPlayedSong = self.parent.queueManager.currentSong
                         print("💿 Stored last played song from video end: \(self.parent.queueManager.currentSong["title"] as? String ?? "Unknown")")
@@ -151,19 +155,17 @@ struct YouTubePlayerView: UIViewRepresentable {
                 case .buffering:
                     print("⏳ Video buffering")
                     self.parent.songCurrentlyPlaying = true
-                    // Don't change shouldBePlaying during buffering
                     
                 case .cued:
                     print("📋 Video cued")
                     self.parent.songCurrentlyPlaying = false
-                    // Don't change shouldBePlaying when cued
                     
                 case .unstarted:
                     print("⭕ Video unstarted")
                     self.parent.songCurrentlyPlaying = false
                     self.shouldBePlaying = true
+                    self.isManuallyPausedByUser = false // Reset for new video
                     
-                    // Don't auto-start if in host-only mode and user is not host
                     if !self.parent.roomManager.hostPlayingOnly || self.parent.roomManager.isCurrentUserHost {
                         playerView.playVideo()
                     } else {
@@ -182,40 +184,35 @@ struct YouTubePlayerView: UIViewRepresentable {
             print("❌ Player error: \(error)")
             parent.songCurrentlyPlaying = false
             shouldBePlaying = false
+            isManuallyPausedByUser = false
         }
         
-        // Method to manually pause (called by user interaction)
+        // Called when user manually pauses
         func manualPause() {
             shouldBePlaying = false
-            print("🎵 Manual pause - shouldBePlaying set to false")
+            isManuallyPausedByUser = true // Set the manual pause flag
+            print("🎵 Manual pause - shouldBePlaying set to false, isManuallyPausedByUser = true")
         }
         
-        // Method to manually play (called by user interaction)
+        // Called when user manually plays
         func manualPlay() {
             guard let playerView = parent.playerInstance else { return }
             
-            // Don't allow manual play if we're in host-only mode and user is not host
             if parent.roomManager.hostPlayingOnly && !parent.roomManager.isCurrentUserHost {
                 print("🎵 Manual play blocked - host-only mode active and user is not host")
                 return
             }
             
             shouldBePlaying = true
-            print("🎵 Manual play - shouldBePlaying set to true")
+            isManuallyPausedByUser = false // Clear the manual pause flag
+            print("🎵 Manual play - shouldBePlaying set to true, isManuallyPausedByUser = false")
             playerView.playVideo()
         }
         
         // Method to apply mute state for audio control
         func applyMuteState(_ shouldMute: Bool, playerView: YTPlayerView) {
             isManuallyMuted = shouldMute
-            // Since mute/unmute methods don't exist, we rely on AVAudioSession for audio control
             print("🔇 Audio control state set via coordinator: shouldMute = \(shouldMute)")
-        }
-        
-        // Check if the player was manually paused (not by audio control or host-only mode)
-        private func isManuallyPaused() -> Bool {
-            // If we're muted due to audio control or paused due to host-only mode, don't consider it a manual pause
-            return !shouldBePlaying && !isManuallyMuted && !isHostPlayingOnlyPaused
         }
     }
 }

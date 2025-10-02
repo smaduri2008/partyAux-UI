@@ -5,32 +5,6 @@
 //  Created by Ajay Avasi on 7/14/25.
 //
 
-/*
-EXAMPLE USAGE:
- 
- import SwiftUI
- import AVFoundation
-
- struct ContentView: View {
-     var queueManager = QueueManager(jwt_auth: "", room: "")
-     var body: some View {
-         @State var youtubePlayer: YTPlayerView?
-         MusicPlayerView(
-             youtubePlayer: youtubePlayer,
-             queueManager: queueManager
-         )
-     }
-
- }
- 
- 
- 
- ALL INCOMING NETWORK REQUESTS SHOULD GO HERE
- 
- VIDEO EVENTS FOUND IN YOUTUBEPLAYERVIEW.VIEW
-
-*/
-
 import SwiftUI
 import AVFoundation
 
@@ -39,9 +13,7 @@ struct MusicPlayerView: View {
     @State public var currentVideoID = ""
     @State public var youtubePlayer: YTPlayerView?
    
-    // Instead, receive it as a parameter and observe it
     @ObservedObject var queueManager: QueueManager
-   
     @State private var albumArtURL: URL? = nil
     @State private var isSearching = false
     @State private var isQueueVisible = false
@@ -55,7 +27,6 @@ struct MusicPlayerView: View {
 
     @ObservedObject var roomManager: RoomManager
     
-    // Add binding to control visibility of the player UI
     @Binding var showPlayerUI: Bool
    
     let playerVars: [String: Any] = [
@@ -73,7 +44,6 @@ struct MusicPlayerView: View {
 
     var body: some View {
         ZStack {
-            // YouTube Player (Always Present, Hidden Off-Screen)
             YouTubePlayerView(
                 videoID: currentVideoID,
                 playerVars: playerVars,
@@ -89,12 +59,10 @@ struct MusicPlayerView: View {
             .offset(x: UIScreen.main.bounds.width, y: UIScreen.main.bounds.height)
             .zIndex(0)
             
-            // Only show UI when showPlayerUI is true
             if showPlayerUI {
                 LinearGradient.backgroundGradient
                     .ignoresSafeArea()
                 
-                // Main Player View
                 if !isSearching && !isQueueVisible && !isMembersVisible && !isSettingsVisible {
                     MainPlayerView(
                         albumArtURL: $albumArtURL,
@@ -121,7 +89,6 @@ struct MusicPlayerView: View {
                     .zIndex(1)
                 }
                
-                // Search View Overlay
                 if isSearching {
                     SearchOverlayView(isSearching: $isSearching)
                         .environmentObject(queueManager)
@@ -133,7 +100,6 @@ struct MusicPlayerView: View {
                         .zIndex(2)
                 }
                
-                // Queue View Overlay
                 if isQueueVisible {
                     QueueOverlayView(isQueueVisible: $isQueueVisible)
                         .environmentObject(queueManager)
@@ -145,7 +111,6 @@ struct MusicPlayerView: View {
                         .zIndex(2)
                 }
                 
-                // Members View Overlay
                 if isMembersVisible {
                     MembersOverlayView(isMembersVisible: $isMembersVisible)
                         .environmentObject(roomManager)
@@ -156,7 +121,6 @@ struct MusicPlayerView: View {
                         .zIndex(2)
                 }
                 
-                // Settings View Overlay
                 if isSettingsVisible {
                     SettingsOverlayView(isSettingsVisible: $isSettingsVisible)
                         .environmentObject(roomManager)
@@ -183,12 +147,10 @@ struct MusicPlayerView: View {
             handleQueueChange()
         }
         .onChange(of: queueManager.currentSong["downvotes"] as? [String] ?? []) { downvotesArray in
-            // Update isDisliked state when downvotes array changes
             print("🔄 Downvotes array changed in onChange: \(downvotesArray)")
             updateDislikedState(downvotesArray: downvotesArray)
         }
         .onChange(of: queueManager.currentSong["downvote_count"] as? Int ?? 0) { newCount in
-            // Also update when downvote count changes (in case array isn't updated)
             print("🔄 Downvote count changed in onChange: \(newCount)")
             if let downvotesArray = queueManager.currentSong["downvotes"] as? [String] {
                 updateDislikedState(downvotesArray: downvotesArray)
@@ -199,7 +161,6 @@ struct MusicPlayerView: View {
         }
     }
     
-    // MARK: - Helper Methods
     private func updateDislikedState(downvotesArray: [String]) {
         let userEmail = roomManager.userData.email
         let wasDisliked = isDisliked
@@ -211,7 +172,6 @@ struct MusicPlayerView: View {
         }
     }
    
-    // MARK: - Setup Methods
     private func setupPlayer() {
         roomManager.eventHandlers()
        
@@ -246,11 +206,8 @@ struct MusicPlayerView: View {
             print("Updating currentVideoID to: \(newVideoID)")
             self.currentVideoID = newVideoID
             
-            // Reset like state for new song
             self.isLiked = false
             
-            // Check if current user has already downvoted this song
-            // Use queueManager.currentSong for consistency since that's what the UI uses
             if let downvotesArray = queueManager.currentSong["downvotes"] as? [String] {
                 self.isDisliked = downvotesArray.contains(roomManager.userData.email)
                 print("🔄 Song changed - isDisliked set to: \(self.isDisliked) based on array: \(downvotesArray)")
@@ -285,23 +242,29 @@ struct MusicPlayerView: View {
         }
     }
    
-    // MARK: - Control Methods
     func togglePlayPause() {
         guard playerReady, let player = youtubePlayer else {
             print("Player not ready yet")
             return
         }
        
-        // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
        
         if isPlaying {
             player.pauseVideo()
             isPlaying = false
+            // Inform the coordinator that this is a manual pause
+            if let coordinator = player.delegate as? YouTubePlayerView.Coordinator {
+                coordinator.manualPause()
+            }
         } else {
             player.playVideo()
             isPlaying = true
+            // Inform the coordinator that this is a manual play
+            if let coordinator = player.delegate as? YouTubePlayerView.Coordinator {
+                coordinator.manualPlay()
+            }
         }
     }
    
@@ -313,36 +276,27 @@ struct MusicPlayerView: View {
     }
 
     func toggleLike() {
-        // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
         
         isLiked.toggle()
         if isLiked {
-            isDisliked = false // Can't be both liked and disliked
+            isDisliked = false
         }
         print("Song \(isLiked ? "liked" : "unliked"): \(queueManager.currentSong["title"] as? String ?? "Unknown")")
-        
-        // Here you can add your like functionality, such as:
-        // - Save to favorites
-        // - Send to backend
-        // - Update local storage
     }
 
     func toggleDislike() {
-        // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
         
         print("🔽 toggleDislike called - current isDisliked: \(isDisliked)")
         
-        // First check: if isDisliked is already true, user has already voted
         if isDisliked {
             print("⚠️ User has already downvoted this song (checked isDisliked state)")
             return
         }
         
-        // Check if user has already downvoted this song
         guard let currentSongUuid = queueManager.currentSong["uuid"] as? String else {
             print("❌ No current song UUID found")
             return
@@ -354,12 +308,10 @@ struct MusicPlayerView: View {
         let userEmail = roomManager.userData.email
         print("🔍 Checking downvotes for user: \(userEmail)")
         
-        // Check downvotes array if it exists
         if let downvotesArray = queueManager.currentSong["downvotes"] as? [String] {
             print("🔍 Current downvotes array: \(downvotesArray)")
             if downvotesArray.contains(userEmail) {
                 print("⚠️ User has already downvoted this song (checked downvotes array)")
-                // Update isDisliked state to match the array
                 self.isDisliked = true
                 return
             }
@@ -367,7 +319,6 @@ struct MusicPlayerView: View {
             print("⚠️ No downvotes array found - proceeding with downvote")
         }
         
-        // Perform the downvote
         print("📤 Sending downvote request for song: \(currentSongUuid)")
         roomManager.downvoteSong(songUuid: currentSongUuid) { success, message in
             DispatchQueue.main.async {
@@ -376,11 +327,9 @@ struct MusicPlayerView: View {
                     self.isDisliked = true
                     self.isLiked = false
                     
-                    // Immediately update the local downvote count for instant feedback
                     let currentCount = self.queueManager.currentSong["downvote_count"] as? Int ?? 0
                     self.queueManager.currentSong["downvote_count"] = currentCount + 1
                     
-                    // Also add user to downvotes array if it exists
                     if var downvotesArray = self.queueManager.currentSong["downvotes"] as? [String] {
                         if !downvotesArray.contains(self.roomManager.userData.email) {
                             downvotesArray.append(self.roomManager.userData.email)
@@ -388,13 +337,11 @@ struct MusicPlayerView: View {
                             print("✅ Updated local downvotes array: \(downvotesArray)")
                         }
                     } else {
-                        // Create downvotes array if it doesn't exist
                         self.queueManager.currentSong["downvotes"] = [self.roomManager.userData.email]
                         print("✅ Created new downvotes array: [\(self.roomManager.userData.email)]")
                     }
                     
                     print("✅ Local UI updated - isDisliked: \(self.isDisliked)")
-                    // The socket event will handle updating other users' views
                 } else {
                     print("❌ Downvote failed: \(message)")
                 }
@@ -444,10 +391,8 @@ struct SearchOverlayView: View {
    
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 Button(action: {
-                    // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
                    
@@ -489,10 +434,8 @@ struct QueueOverlayView: View {
    
     var body: some View {
         VStack(spacing: 0) {
-            // Header with Back button
             HStack {
                 Button(action: {
-                    // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
                    
@@ -518,7 +461,6 @@ struct QueueOverlayView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
            
-            // Use the new merged QueueView, but hide its header since we have our own
             QueueView()
                 .environmentObject(queueManager)
                 .environmentObject(roomManager)
@@ -526,10 +468,6 @@ struct QueueOverlayView: View {
         .background(LinearGradient.backgroundGradient.ignoresSafeArea())
     }
 }
-
-// MARK: - Queue View Content (without header) - REMOVED DUPLICATE CODE
-// Using the QueueView from QueueView.swift instead to avoid duplication
-   
 
 // MARK: - Settings Overlay View
 struct SettingsOverlayView: View {
@@ -539,10 +477,8 @@ struct SettingsOverlayView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 Button(action: {
-                    // Add haptic feedback
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
                    
@@ -584,23 +520,6 @@ struct SettingsOverlayView: View {
     }
 }
 
-/*
-// MARK: - Members Overlay View
-struct MembersOverlayView: View {
-    @Binding var isMembersVisible: Bool
-    @EnvironmentObject var roomManager: RoomManager
-    
-    var body: some View {
-        RoomMembersView(roomManager: roomManager, isVisible: $isMembersVisible)
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
-            .zIndex(2)
-    }
-}
- */
-
 // MARK: - Main Player View
 struct MainPlayerView: View {
     @Binding var albumArtURL: URL?
@@ -623,7 +542,6 @@ struct MainPlayerView: View {
    
     var body: some View {
         VStack(spacing: 0) {
-            // Top Header with Room Code and Actions
             TopHeaderView(
                 roomCode: roomManager.roomCode,
                 isSearching: $isSearching,
@@ -633,33 +551,32 @@ struct MainPlayerView: View {
                 roomManager: roomManager
             )
            
-            Spacer()
-           
-            // Main Player Content
-            VStack(spacing: 24) {
-                // Album Art with Glow Effect
-                AlbumArtView(albumArtURL: albumArtURL)
-               
-                // Song Information
-                SongInfoView(currentSong: queueManager.currentSong)
-               
-                // Player Controls - Pass host status
-                PlayerControlsView(
-                    isPlaying: isPlaying,
-                    isHost: roomManager.isCurrentUserHost,
-                    isLiked: isLiked,
-                    isDisliked: isDisliked,
-                    queueManager: queueManager,
-                    roomManager: roomManager,
-                    togglePlayPause: togglePlayPause,
-                    onSkip: skipToNext,
-                    toggleLike: toggleLike,
-                    toggleDislike: toggleDislike
-                )
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    Spacer()
+                        .frame(height: 20)
+                    
+                    AlbumArtView(albumArtURL: albumArtURL)
+                    SongInfoView(currentSong: queueManager.currentSong)
+                    PlayerControlsView(
+                        isPlaying: isPlaying,
+                        isHost: roomManager.isCurrentUserHost,
+                        isLiked: isLiked,
+                        isDisliked: isDisliked,
+                        queueManager: queueManager,
+                        roomManager: roomManager,
+                        togglePlayPause: togglePlayPause,
+                        onSkip: skipToNext,
+                        toggleLike: toggleLike,
+                        toggleDislike: toggleDislike
+                    )
+                    
+                    Spacer()
+                        .frame(height: 40)
+                }
+                .padding(.horizontal, 24)
+                .frame(minHeight: UIScreen.main.bounds.height - 200)
             }
-            .padding(.horizontal, 24)
-           
-            Spacer()
         }
     }
 }
@@ -677,7 +594,6 @@ struct TopHeaderView: View {
    
     var body: some View {
         VStack(spacing: 8) {
-            // Room Code Badge on top
             HStack {
                 Image(systemName: roomManager.isCurrentUserHost ? "crown.fill" : "music.note.house.fill")
                     .font(.system(size: 16, weight: .medium))
@@ -706,9 +622,7 @@ struct TopHeaderView: View {
                     )
             )
            
-            // Action Buttons Row
             HStack(spacing: 12) {
-                // Members Button
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
@@ -723,7 +637,6 @@ struct TopHeaderView: View {
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
                
-                // Search Button
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
@@ -738,7 +651,6 @@ struct TopHeaderView: View {
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
                
-                // Queue Button
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
@@ -753,7 +665,6 @@ struct TopHeaderView: View {
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
                
-                // Settings Button
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
@@ -768,7 +679,6 @@ struct TopHeaderView: View {
                         .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
                 }
                
-                // Leave Room Button
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                     impactFeedback.impactOccurred()
@@ -805,14 +715,12 @@ struct AlbumArtView: View {
    
     var body: some View {
         ZStack {
-            // Glow Effect
             Circle()
                 .fill(LinearGradient.primaryGradient)
                 .frame(width: 240, height: 240)
                 .blur(radius: 30)
                 .opacity(0.3)
            
-            // Album Art Container
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.appCardBackground)
                 .frame(width: 200, height: 200)
@@ -873,7 +781,6 @@ struct SongInfoView: View {
                     .lineLimit(1)
             }
             
-            // Added by information
             if let addedBy = currentSong["added_by"] as? String, !addedBy.isEmpty {
                 HStack(spacing: 4) {
                     Image(systemName: "person.circle.fill")
@@ -905,7 +812,6 @@ struct PlayerControlsView: View {
     
     private var currentSongDownvotes: Int {
         guard let downvotesArray = queueManager.currentSong["downvotes"] as? [String] else {
-            // Fallback to downvote_count if downvotes array is not available
             return queueManager.currentSong["downvote_count"] as? Int ?? 0
         }
         return downvotesArray.count
@@ -923,7 +829,6 @@ struct PlayerControlsView: View {
    
     var body: some View {
         VStack(spacing: 24) {
-            // Host Status Indicator (optional)
             if !isHost {
                 HStack {
                     Image(systemName: "eye.fill")
@@ -939,7 +844,6 @@ struct PlayerControlsView: View {
                 .cornerRadius(12)
             }
             
-            // Downvote info for current song
             if !queueManager.currentSong.isEmpty {
                 CurrentSongDownvoteInfo(
                     downvotes: currentSongDownvotes,
@@ -948,9 +852,7 @@ struct PlayerControlsView: View {
                 )
             }
             
-            // Like/Dislike Row - Available to all users
             HStack(spacing: 60) {
-                // Thumbs Down Button
                 Button(action: toggleDislike) {
                     ZStack {
                         Circle()
@@ -969,32 +871,9 @@ struct PlayerControlsView: View {
                     }
                 }
                 .disabled(hasUserDownvoted)
-                
-                /*
-                // Thumbs Up Button
-                Button(action: toggleLike) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.2))
-                            .frame(width: 50, height: 50)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.appSurface, lineWidth: 1)
-                            )
-                        
-                        Image(systemName: isLiked ? "hand.thumbsup.fill" : "hand.thumbsup")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(isLiked ? .green : .white)
-                            .scaleEffect(isLiked ? 1.1 : 1.0)
-                            .animation(.bouncy, value: isLiked)
-                    }
-                }
-                 */
             }
             
-            // Main Control Row
             HStack(spacing: 40) {
-                // Main Play/Pause Button - Only active for host
                 Button(action: {
                     if isHost {
                         togglePlayPause()
@@ -1026,10 +905,8 @@ struct PlayerControlsView: View {
                 }
                 .disabled(!isHost)
                 
-                // Skip Button - Only active for host
                 Button(action: {
                     if isHost {
-                        // Add haptic feedback
                         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                         impactFeedback.impactOccurred()
                        
@@ -1082,24 +959,22 @@ struct CurrentSongDownvoteInfo: View {
     private var warningLevel: Int {
         switch progress {
         case 0..<0.5:
-            return 0  // Safe
+            return 0
         case 0.5..<0.8:
-            return 1  // Warning
+            return 1
         default:
-            return 2  // Danger
+            return 2
         }
     }
     
     var body: some View {
         HStack(spacing: 12) {
-            // Warning icon
             Image(systemName: warningLevel == 2 ? "exclamationmark.triangle.fill" :
                              warningLevel == 1 ? "exclamationmark.circle.fill" : "info.circle.fill")
                 .font(.system(size: 16))
                 .foregroundColor(warningLevel == 2 ? .red :
                                warningLevel == 1 ? .orange : .blue)
             
-            // Progress bar
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Downvotes")
@@ -1115,7 +990,6 @@ struct CurrentSongDownvoteInfo: View {
                                        warningLevel == 1 ? .orange : .textSecondary)
                 }
                 
-                // Progress bar
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 2)
@@ -1140,7 +1014,6 @@ struct CurrentSongDownvoteInfo: View {
                 .frame(height: 4)
             }
             
-            // User vote indicator
             if hasUserDownvoted {
                 Image(systemName: "hand.thumbsdown.fill")
                     .font(.system(size: 12))
