@@ -197,6 +197,7 @@
 				TargetAttributes = {
 					392AD13A2E21767C0036DD96 = {
 						CreatedOnToolsVersion = 16.4;
+						LastSwiftMigration = 1640;
 					};
 					392AD1472E21767D0036DD96 = {
 						CreatedOnToolsVersion = 16.4;
@@ -420,9 +421,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MCPFAFRPU2;
+				DEVELOPMENT_TEAM = U54H3TYWAG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = partyAux/Info.plist;
@@ -435,10 +437,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = personal.partyAux293;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sanskaar.partyAux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "/Users/sanskaarsrivastava/Desktop/partyAux-Final2/partyAux/Classes/partyAux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "partyAux/Classes/partyAux-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -449,9 +452,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = MCPFAFRPU2;
+				DEVELOPMENT_TEAM = U54H3TYWAG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = partyAux/Info.plist;
@@ -464,10 +468,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = personal.partyAux293;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sanskaar.partyAux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "/Users/sanskaarsrivastava/Desktop/partyAux-Final2/partyAux/Classes/partyAux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "partyAux/Classes/partyAux-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
