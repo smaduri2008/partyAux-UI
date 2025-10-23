@@ -229,7 +229,7 @@ struct SearchView: View {
             return
         }
         
-        let urlString = "http://api.partyaux.party/search/suggestions/\(encodedQuery)"
+        let urlString = "https://api.partyaux.party/search/suggestions/\(encodedQuery)"
         guard let url = URL(string: urlString) else {
             isLoadingSuggestions = false
             return
@@ -303,7 +303,7 @@ struct SearchView: View {
             return
         }
 
-        let urlString = "http://api.partyaux.party/search/\(encodedSearchTerm)"
+        let urlString = "https://api.partyaux.party/search/\(encodedSearchTerm)"
         guard let url = URL(string: urlString) else {
             errorMessage = "Invalid URL"
             isLoading = false
@@ -406,7 +406,7 @@ struct SearchView: View {
     }
     
     func addSongsToQueue(song: [String: Any]) {
-        guard let urlRequest = URL(string: "http://api.partyaux.party/add-song-to-queue") else { return }
+        guard let urlRequest = URL(string: "https://api.partyaux.party/add-song-to-queue") else { return }
         var request = URLRequest(url: urlRequest)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
