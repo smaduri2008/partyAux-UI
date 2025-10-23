@@ -241,7 +241,7 @@ class QueueManager: ObservableObject {
     }
 
     class func sendPostRequest(body: [String: String], endpoint: String, completion: @escaping ([String: Any]?) -> Void) {
-        guard let url = URL(string: "http://35.208.64.59" + endpoint) else {
+        guard let url = URL(string: "http://api.partyaux.play" + endpoint) else {
             print("❌ Invalid URL: http://35.208.64.59\(endpoint)")
             completion(nil)
             return
@@ -347,7 +347,7 @@ class QueueManager: ObservableObject {
     }
     
     class func sendComplexPostRequest(body: [String: Any], endpoint: String, completion: @escaping ([String: Any]?) -> Void) {
-        guard let url = URL(string: "http://35.208.64.59" + endpoint) else {
+        guard let url = URL(string: "http://api.partyaux.play" + endpoint) else {
             print("❌ Invalid URL: http://35.208.64.59\(endpoint)")
             completion(nil)
             return

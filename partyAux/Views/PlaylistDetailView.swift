@@ -263,7 +263,7 @@ struct PlaylistDetailView: View {
     
     // Custom function to update playlist on server without side effects
     private func updatePlaylistOnServer(songs: [PlaylistSong]) {
-        guard let url = URL(string: "http://35.208.64.59/update-playlist") else {
+        guard let url = URL(string: "http://api.partyaux.party/update-playlist") else {
             print("❌ Invalid URL for update-playlist")
             return
         }
@@ -365,7 +365,7 @@ struct PlaylistDetailView: View {
         // Trigger animation and haptic feedback
         triggerAddToQueueAnimation(index: index)
         
-        guard let urlRequest = URL(string: "http://35.208.64.59/add-song-to-queue") else { return }
+        guard let urlRequest = URL(string: "http://api.partyaux.party/add-song-to-queue") else { return }
         var request = URLRequest(url: urlRequest)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -42,6 +42,7 @@ struct ContentView: View {
                         LoadingView()
                     case .email:
                         EmailView()
+                        //AuthenticatedTabView()
                     case .username:
                         CreateUsernameView()
                     case .authenticated:

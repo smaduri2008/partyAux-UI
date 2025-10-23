@@ -31,7 +31,7 @@ class UserAuth: ObservableObject {
     @Published var authenticated: Bool = false
     @Published var showOTPView: Bool = false
     
-    let url = "http://35.208.64.59"
+    let url = "http://api.partyaux.party"
     let jwtKey = "auth_token"
     let emailKey = "user_email"
     let usernameKey = "user_username"

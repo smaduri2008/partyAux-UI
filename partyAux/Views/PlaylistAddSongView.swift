@@ -157,7 +157,7 @@ struct PlaylistAddSongView: View {
             isLoadingSuggestions = false
             return
         }
-        let urlString = "http://35.208.64.59/search/suggestions/\(encodedQuery)"
+        let urlString = "http://api.partyaux.party/search/suggestions/\(encodedQuery)"
         guard let url = URL(string: urlString) else {
             isLoadingSuggestions = false
             return
@@ -209,7 +209,7 @@ struct PlaylistAddSongView: View {
             isLoading = false
             return
         }
-        let urlString = "http://35.208.64.59/search/\(encodedSearchTerm)"
+        let urlString = "http://api.partyaux.party/search/\(encodedSearchTerm)"
         guard let url = URL(string: urlString) else {
             errorMessage = "Invalid URL"
             isLoading = false

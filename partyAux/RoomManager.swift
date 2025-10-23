@@ -75,7 +75,7 @@ class RoomManager: ObservableObject{
     init(userData: UserAuth) {
         self.userData = userData
         self.queueManager = nil
-        manager = SocketManager(socketURL: URL(string: "http://35.208.64.59")!, config: [.log(true), .compress, .reconnects(true)])
+        manager = SocketManager(socketURL: URL(string: "https://api.partyaux.party")!, config: [.log(true), .compress, .reconnects(true)])
         socket = manager.defaultSocket
         print("RoomManager initialized")
         

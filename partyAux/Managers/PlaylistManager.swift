@@ -7,7 +7,7 @@ class PlaylistManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let baseURL = "http://35.208.64.59"
+    private let baseURL = "http://api.partyaux.party"
     var userData: UserAuth
     
     var userEmail: String {
