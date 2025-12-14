@@ -15,37 +15,42 @@ struct CreateUsernameView: View {
     @FocusState private var isUsernameFocused: Bool
 
     var body: some View {
-        ZStack {
-            LinearGradient.backgroundGradient
+        GeometryReader { geometry in
+            ZStack {
+            // Premium animated background
+            Color.deepNavy
                 .ignoresSafeArea()
+            
+            // Subtle gradient orbs sized relative to screen width
+            Circle()
+                .fill(Color.electricCyan.opacity(0.1))
+                .frame(width: min(geometry.size.width * 0.8, 300), height: min(geometry.size.width * 0.8, 300))
+                .blur(radius: 80)
+                .offset(x: -geometry.size.width * 0.12, y: -geometry.size.height * 0.06)
+
+            Circle()
+                .fill(Color.softPurple.opacity(0.1))
+                .frame(width: min(geometry.size.width * 0.7, 250), height: min(geometry.size.width * 0.7, 250))
+                .blur(radius: 60)
+                .offset(x: geometry.size.width - geometry.size.width * 0.12, y: geometry.size.height - geometry.size.height * 0.12)
 
             ScrollView {
                 VStack(spacing: 40) {
                     Spacer(minLength: 60)
                     
                     // Header Section
-                    VStack(spacing: 20) {
-                        // Animated Profile Icon
-                        ZStack {
-                            Circle()
-                                .fill(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing))
-                                .frame(width: 80, height: 80)
-                                .shadow(color: Color.white.opacity(0.3), radius: 10, x: 0, y: 5)
-                            
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 32, weight: .medium))
-                                .foregroundColor(.black)
-                        }
+                    VStack(spacing: 24) {
+                        // Animated Profile Icon with premium styling
+                        LogoView(size: min(geometry.size.width * 0.14, 64), hasBackground: true)
                         
-                        VStack(spacing: 8) {
+                        VStack(spacing: 10) {
                             Text("Almost There!")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.textPrimary)
+                                .font(Font.premium(size: 28, weight: .bold))
+                                .foregroundColor(.white)
                             
                             Text("Choose a unique username to complete your profile")
-                                .font(.callout)
-                                .foregroundColor(.textSecondary)
+                                .font(Font.premium(size: 15))
+                                .foregroundColor(.white.opacity(0.6))
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 20)
                         }
@@ -53,42 +58,56 @@ struct CreateUsernameView: View {
                     .animation(.smooth.delay(0.2), value: true)
                     
                     // Username Input Section
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
+                    VStack(spacing: 24) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) {
                                 Image(systemName: "at")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.electricCyan)
+                                    .font(.system(size: 14, weight: .semibold))
                                 
                                 Text("Username")
-                                    .font(.callout)
-                                    .foregroundColor(.textSecondary)
-                                    .fontWeight(.medium)
+                                    .font(Font.premium(size: 13, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .textCase(.uppercase)
+                                    .tracking(0.5)
                             }
                             
-                            TextField("Choose your username", text: $auth.username)
-                                .textFieldStyle(ModernTextFieldStyle())
+                            // Premium text field
+                            TextField("", text: $auth.username)
+                                .placeholder(when: auth.username.isEmpty) {
+                                    Text("Choose your username")
+                                        .foregroundColor(.white.opacity(0.3))
+                                }
+                                .font(Font.premium(size: 16))
+                                .foregroundColor(.white)
                                 .textContentType(.username)
                                 .autocapitalization(.none)
                                 .focused($isUsernameFocused)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color.white.opacity(0.08))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14)
+                                                .stroke(
+                                                    isUsernameFocused ? 
+                                                        Color.electricCyan.opacity(0.6) : 
+                                                        Color.white.opacity(0.1),
+                                                    lineWidth: isUsernameFocused ? 2 : 1
+                                                )
+                                        )
+                                )
+                                .shadow(color: isUsernameFocused ? Color.electricCyan.opacity(0.2) : .clear, radius: 10, x: 0, y: 5)
                                 .onChange(of: auth.username) { newValue in
                                     validateUsername(newValue)
                                     withAnimation(.smooth) {
                                         showError = false
                                     }
                                 }
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(
-                                            isUsernameFocused ? LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing) : 
-                                            LinearGradient(gradient: Gradient(colors: [Color.clear]), startPoint: .leading, endPoint: .trailing),
-                                            lineWidth: isUsernameFocused ? 2 : 1
-                                        )
-                                        .animation(.smooth, value: isUsernameFocused)
-                                )
                             
-                            // Username validation indicators
-                            VStack(alignment: .leading, spacing: 4) {
+                            // Username validation indicators with premium styling
+                            VStack(alignment: .leading, spacing: 8) {
                                 UsernameValidationRow(
                                     text: "At least 3 characters",
                                     isValid: auth.username.count >= 3
@@ -102,64 +121,89 @@ struct CreateUsernameView: View {
                                     isValid: !auth.username.contains(" ") && auth.username.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
                                 )
                             }
+                            .padding(.top, 4)
                             .animation(.smooth, value: auth.username)
                             
                             if showError {
-                                HStack {
+                                HStack(spacing: 6) {
                                     Image(systemName: "exclamationmark.circle.fill")
-                                        .foregroundColor(.red)
-                                        .font(.caption)
+                                        .foregroundColor(.coralPink)
+                                        .font(.system(size: 12))
                                     
                                     Text(errorMessage)
-                                        .font(.caption)
-                                        .foregroundColor(.red)
+                                        .font(Font.premium(size: 12))
+                                        .foregroundColor(.coralPink)
                                 }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.coralPink.opacity(0.15))
+                                )
                                 .transition(.move(edge: .top).combined(with: .opacity))
                                 .animation(.bouncy, value: showError)
                             }
                         }
                         
-                        // Create Account Button
+                        // Create Account Button with premium styling
                         Button(action: {
                             createAccount()
                         }) {
-                            HStack {
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                    Text("Creating Account...")
-                                        .font(.headline)
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 16, weight: .medium))
-                                    Text("Create Account")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
+                            ZStack {
+                                // Glow effect when valid
+                                if isUsernameValid && !isLoading {
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color.electricCyan)
+                                        .blur(radius: 15)
+                                        .opacity(0.4)
                                 }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                Group {
-                                    if isUsernameValid && !isLoading {
-                                        LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing)
+                                
+                                HStack(spacing: 10) {
+                                    if isLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                        Text("Creating Account...")
+                                            .font(Font.premium(size: 16, weight: .semibold))
                                     } else {
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.gray.opacity(0.3)]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 16, weight: .medium))
+                                        Text("Create Account")
+                                            .font(Font.premium(size: 16, weight: .bold))
                                     }
                                 }
-                            )
-                            .foregroundColor(isUsernameValid && !isLoading ? .black : .textTertiary)
-                            .cornerRadius(12)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    Group {
+                                        if isUsernameValid && !isLoading {
+                                            LinearGradient(
+                                                colors: [.electricCyan, .softPurple],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        } else {
+                                            Color.white.opacity(0.1)
+                                        }
+                                    }
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(
+                                            isUsernameValid && !isLoading ? 
+                                                Color.clear : 
+                                                Color.white.opacity(0.1),
+                                            lineWidth: 1
+                                        )
+                                )
+                            }
                             .shadow(
-                                color: isUsernameValid ? Color.white.opacity(0.3) : Color.clear,
-                                radius: 8,
+                                color: isUsernameValid && !isLoading ? Color.electricCyan.opacity(0.4) : Color.clear,
+                                radius: 12,
                                 x: 0,
-                                y: 4
+                                y: 6
                             )
                             .scaleEffect(isLoading ? 0.98 : 1.0)
                             .animation(.bouncy, value: isLoading)
@@ -173,9 +217,12 @@ struct CreateUsernameView: View {
                 }
                 .padding()
             }
+            }
         }
         .navigationTitle("Create Username")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color.deepNavy, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .onTapGesture {
             isUsernameFocused = false
         }
@@ -231,13 +278,25 @@ struct UsernameValidationRow: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: isValid ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isValid ? .green : .textTertiary)
+            ZStack {
+                Circle()
+                    .stroke(isValid ? Color.green : Color.white.opacity(0.2), lineWidth: 1.5)
+                    .frame(width: 16, height: 16)
+                
+                if isValid {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 16, height: 16)
+                    
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
             
             Text(text)
-                .font(.caption)
-                .foregroundColor(isValid ? .textSecondary : .textTertiary)
+                .font(Font.premium(size: 12))
+                .foregroundColor(isValid ? .white.opacity(0.7) : .white.opacity(0.4))
         }
         .animation(.smooth, value: isValid)
     }

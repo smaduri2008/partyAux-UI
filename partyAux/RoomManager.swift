@@ -70,6 +70,7 @@ class RoomManager: ObservableObject{
     
     private var manager: SocketManager
     private var socket : SocketIOClient
+    private var syncTimer: Timer?
     
     
     init(userData: UserAuth) {
@@ -80,6 +81,10 @@ class RoomManager: ObservableObject{
         print("RoomManager initialized")
         
         updateHostStatus()
+    }
+    
+    deinit {
+        stopPeriodicSync()
     }
     
     private func createQueueManager() {
@@ -98,16 +103,8 @@ class RoomManager: ObservableObject{
     }
     
     func createRoom() {
-        let url = userData.url + "/create-room"
-        guard let urlRequest = URL(string: url) else {return}
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["jwt": userData.jwt, "max_downvotes": downvotes])
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data,
-                  let response = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        NetworkManager.shared.post(endpoint: "/create-room", body: ["jwt": userData.jwt ?? "", "max_downvotes": downvotes]) { response in
+            guard let response = response,
                   let status = response["status"] as? String,
                   let code = response["code"] as? String else {
                 print("❌ Could not create room")
@@ -131,7 +128,7 @@ class RoomManager: ObservableObject{
                     print("❌ Room could not be created: \(status)")
                 }
             }
-        }.resume()
+        }
     }
     
     private func updateHostStatus() {
@@ -148,79 +145,91 @@ class RoomManager: ObservableObject{
         }
     }
     
+    private func startPeriodicSync() {
+        stopPeriodicSync()
+        
+        DispatchQueue.main.async {
+            self.syncTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                
+                // Sync queue and members data
+                self.queueManager?.fetchQueue {
+                    print("🔄 Periodic sync: Queue updated")
+                }
+                
+                self.getRoomInfo()
+            }
+            
+            print("✅ Started periodic sync (every 3 seconds)")
+        }
+    }
+    
+    private func stopPeriodicSync() {
+        syncTimer?.invalidate()
+        syncTimer = nil
+        print("⏹️ Stopped periodic sync")
+    }
+    
     func getRoomInfo() {
         print("🔍 Getting room info for room: \(roomCode)")
         print("📧 Current user: \(userData.email)")
         
-        let url = userData.url + "/get-room-info"
-        guard let urlRequest = URL(string: url) else { return }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["room": roomCode, "jwt": userData.jwt])
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data else {
+        NetworkManager.shared.post(endpoint: "/get-room-info", body: ["room": roomCode, "jwt": userData.jwt ?? ""]) { json in
+            guard let json = json else {
                 print("❌ No data returned from getRoomInfo")
                 return
             }
             
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("🔍 Raw room info response: \(jsonString)")
-            }
-            
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let status = json["status"] as? String {
-                    print("📊 Room info status: \(status)")
-                    
-                    if status == "Room info retrieved" {
-                        if let roomInfo = json["room_info"] as? [String: Any] {
-                            DispatchQueue.main.async {
-                                if let hostDict = roomInfo["host"] as? [String: Any],
-                                   let hostUser = hostDict["email"] as? String {
-                                    let previousHost = self.roomHost
-                                    self.roomHost = hostUser
-                                    self.updateHostStatus()
-                                    print("🏠 Host updated to: \(hostUser)")
-                                }
+            if let status = json["status"] as? String {
+                print("📊 Room info status: \(status)")
+                
+                if status == "Room info retrieved" {
+                    if let roomInfo = json["room_info"] as? [String: Any] {
+                        DispatchQueue.main.async {
+                            if let hostDict = roomInfo["host"] as? [String: Any],
+                               let hostUser = hostDict["email"] as? String {
+                                let previousHost = self.roomHost
+                                self.roomHost = hostUser
+                                self.updateHostStatus()
+                                print("🏠 Host updated to: \(hostUser)")
+                            }
+                            
+                            if let usersArray = roomInfo["users"] as? [[String: Any]] {
+                                var memberEmails: [String] = []
+                                var emailToUsername: [String: String] = [:]
                                 
-                                if let usersArray = roomInfo["users"] as? [[String: Any]] {
-                                    var memberEmails: [String] = []
-                                    var emailToUsername: [String: String] = [:]
-                                    
-                                    for userDict in usersArray {
-                                        if let email = userDict["email"] as? String,
-                                           let username = userDict["username"] as? String {
-                                            memberEmails.append(email)
-                                            emailToUsername[email] = username
-                                        }
+                                for userDict in usersArray {
+                                    if let email = userDict["email"] as? String,
+                                       let username = userDict["username"] as? String {
+                                        memberEmails.append(email)
+                                        emailToUsername[email] = username
                                     }
-                                    
-                                    self.roomMembers.removeAll()
-                                    self.roomMembersUsernames.removeAll()
-                                    
-                                    self.roomMembers = memberEmails
-                                    self.roomMembersUsernames = emailToUsername
-                                    self.objectWillChange.send()
                                 }
                                 
-                                if let maxDownvotesValue = roomInfo["max_downvotes"] as? Int {
-                                    self.maxDownvotes = maxDownvotesValue
-                                    print("🎯 Max downvotes set to: \(maxDownvotesValue)")
-                                }
+                                self.roomMembers.removeAll()
+                                self.roomMembersUsernames.removeAll()
                                 
-                                // Parse host playing only setting
-                                if let hostOnly = roomInfo["host_playing_only"] as? Bool {
-                                    let previousValue = self.hostPlayingOnly
-                                    self.hostPlayingOnly = hostOnly
-                                    print("🎵 Host playing only updated: \(previousValue) -> \(hostOnly)")
-                                }
+                                self.roomMembers = memberEmails
+                                self.roomMembersUsernames = emailToUsername
+                                self.objectWillChange.send()
+                            }
+                            
+                            if let maxDownvotesValue = roomInfo["max_downvotes"] as? Int {
+                                self.maxDownvotes = maxDownvotesValue
+                                print("🎯 Max downvotes set to: \(maxDownvotesValue)")
+                            }
+                            
+                            // Parse host playing only setting
+                            if let hostOnly = roomInfo["host_playing_only"] as? Bool {
+                                let previousValue = self.hostPlayingOnly
+                                self.hostPlayingOnly = hostOnly
+                                print("🎵 Host playing only updated: \(previousValue) -> \(hostOnly)")
                             }
                         }
                     }
                 }
             }
-        }.resume()
+        }
     }
     
     func connect() {
@@ -247,6 +256,9 @@ class RoomManager: ObservableObject{
         print("✅ Joining room: \(roomCode)")
         self.joinedRoom = true
         self.getRoomInfo()
+        
+        // Start periodic sync
+        startPeriodicSync()
     }
     
     func joinExistingRoom(code: String) {
@@ -270,52 +282,39 @@ class RoomManager: ObservableObject{
         self.currentSong = [:]
         self.roomCode = ""
         self.hostPlayingOnly = false
+        
+        // Stop periodic sync
+        stopPeriodicSync()
+        
         disconnect()
     }
     
     func downvoteSong(songUuid: String, completion: @escaping (Bool, String) -> Void) {
-        let url = userData.url + "/add-downvote"
-        guard let urlRequest = URL(string: url) else {
-            completion(false, "Invalid URL")
-            return
-        }
-        
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+        NetworkManager.shared.post(endpoint: "/add-downvote", body: [
             "jwt": userData.jwt ?? "",
             "room": roomCode,
             "song_uuid": songUuid
-        ])
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data else {
+        ]) { jsonData in
+            guard let jsonData = jsonData else {
                 DispatchQueue.main.async {
                     completion(false, "No response from server")
                 }
                 return
             }
             
-            if let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                DispatchQueue.main.async {
-                    if let status = jsonData["status"] as? String {
-                        if status == "Downvote added" {
-                            let downvoteCount = jsonData["downvotes"] as? Int ?? 0
-                            completion(true, "Downvoted! (\(downvoteCount)/\(self.maxDownvotes))")
-                        } else {
-                            completion(false, status)
-                        }
+            DispatchQueue.main.async {
+                if let status = jsonData["status"] as? String {
+                    if status == "Downvote added" {
+                        let downvoteCount = jsonData["downvotes"] as? Int ?? 0
+                        completion(true, "Downvoted! (\(downvoteCount)/\(self.maxDownvotes))")
                     } else {
-                        completion(false, "Unknown response")
+                        completion(false, status)
                     }
-                }
-            } else {
-                DispatchQueue.main.async {
-                    completion(false, "Failed to parse response")
+                } else {
+                    completion(false, "Unknown response")
                 }
             }
-        }.resume()
+        }
     }
     
     private func updateCurrentSongDownvoteData(downvotes: Int) {
@@ -404,18 +403,18 @@ class RoomManager: ObservableObject{
             if let payload = data.first as? [String: Any],
                let songDict = payload["song"] as? [String: Any] {
                 DispatchQueue.main.async {
-                    self.queueManager?.fetchQueue {
-                        print("🔄 Queue refreshed after current song change")
-                        // Check autoplay after refreshing queue
-                        DispatchQueue.main.async {
-                            if let queueManager = self.queueManager {
-                                queueManager.checkAndTriggerAutoplay(roomManager: self)
-                            }
-                        }
-                    }
                     self.currentSong = songDict
                     self.queueManager?.currentSong = songDict
-                    print("✅ Updated current song: \(songDict)")
+                    print("✅ Updated current song: \(songDict["title"] as? String ?? "Unknown")")
+                    
+                    // Force UI update
+                    self.objectWillChange.send()
+                    self.queueManager?.objectWillChange.send()
+                    
+                    // Immediately refresh queue to ensure sync
+                    self.queueManager?.fetchQueue {
+                        print("🔄 Queue refreshed after current song change")
+                    }
                 }
             } else {
                 // If no song data (empty/null song), store current song as last played before clearing
@@ -430,9 +429,16 @@ class RoomManager: ObservableObject{
                     self.queueManager?.currentSong = [:]
                     print("✅ Cleared current song")
                     
-                    // Check if we should trigger autoplay when there's no current song
-                    if let queueManager = self.queueManager {
-                        queueManager.checkAndTriggerAutoplay(roomManager: self)
+                    // Force UI update
+                    self.objectWillChange.send()
+                    self.queueManager?.objectWillChange.send()
+                    
+                    // Refresh queue and check autoplay
+                    self.queueManager?.fetchQueue {
+                        print("🔄 Queue refreshed after song cleared")
+                        if let queueManager = self.queueManager {
+                            queueManager.checkAndTriggerAutoplay(roomManager: self)
+                        }
                     }
                 }
             }
@@ -441,30 +447,71 @@ class RoomManager: ObservableObject{
         socket.on("delete_head_song") { data, ack in
             print("🗑️ Head song deleted from queue")
             DispatchQueue.main.async {
-                // Remove first song from queue without full refresh
-                self.queueManager?.removeFirstSongFromQueue()
-                print("🔄 Removed head song from queue")
+                // Immediately refresh both current song and queue
+                self.queueManager?.fetchCurrentSong {
+                    self.currentSong = self.queueManager?.currentSong ?? [:]
+                    self.objectWillChange.send()
+                }
                 
-                // Check if we should trigger autoplay after removing the song
-                if let queueManager = self.queueManager {
-                    queueManager.checkAndTriggerAutoplay(roomManager: self)
+                self.queueManager?.fetchQueue {
+                    print("🔄 Queue refreshed after head song deleted")
+                    // Check autoplay after queue is updated
+                    if let queueManager = self.queueManager {
+                        queueManager.checkAndTriggerAutoplay(roomManager: self)
+                    }
                 }
             }
         }
         
         socket.on("add_song") { data, ack in
             print("➕ Song added to queue")
-            if let payload = data.first as? [String: Any],
-               let songDict = payload["song"] as? [String: Any] {
+            
+            // Check if there's currently no song playing
+            let currentSongEmpty = self.currentSong.isEmpty || (self.currentSong["url"] as? String ?? "").isEmpty
+            let queueManagerSongEmpty = self.queueManager?.currentSong.isEmpty ?? true || 
+                (self.queueManager?.currentSong["url"] as? String ?? "").isEmpty
+            let wasEmpty = currentSongEmpty && queueManagerSongEmpty
+            
+            print("🔍 add_song: currentSongEmpty=\(currentSongEmpty), queueManagerSongEmpty=\(queueManagerSongEmpty), wasEmpty=\(wasEmpty)")
+            
+            // First fetch current song from server - it may have been auto-set
+            self.queueManager?.fetchCurrentSong {
                 DispatchQueue.main.async {
-                    // Add song to queue without changing order of existing songs
-                    self.queueManager?.addSongToQueue(songDict)
+                    // Update local current song reference
+                    if let queueManager = self.queueManager {
+                        self.currentSong = queueManager.currentSong
+                    }
                     
-                    // If this is the first song and no current song, set as current
-                    if self.currentSong.isEmpty {
-                        self.currentSong = songDict
-                        self.queueManager?.currentSong = songDict
-                        print("✅ Set as current song since queue was empty")
+                    // Then fetch queue
+                    self.queueManager?.fetchQueue {
+                        DispatchQueue.main.async {
+                            // If there was no song before and server didn't set one, set it ourselves
+                            if wasEmpty {
+                                let serverSetSong = !(self.queueManager?.currentSong.isEmpty ?? true) && 
+                                    !(self.queueManager?.currentSong["url"] as? String ?? "").isEmpty
+                                
+                                if serverSetSong {
+                                    print("✅ Server already set current song")
+                                    self.currentSong = self.queueManager?.currentSong ?? [:]
+                                } else if let firstSongUuid = self.queueManager?.queueOrder.first,
+                                          let firstSong = self.queueManager?.queue[firstSongUuid] {
+                                    // Server didn't set it, so we set it from queue
+                                    self.currentSong = firstSong
+                                    self.queueManager?.currentSong = firstSong
+                                    print("✅ Set first queue song as current since queue was empty")
+                                }
+                                
+                                // Post notification to trigger playback
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("FirstSongAdded"),
+                                    object: nil
+                                )
+                            }
+                            
+                            // Force UI update
+                            self.objectWillChange.send()
+                            self.queueManager?.objectWillChange.send()
+                        }
                     }
                 }
             }
@@ -472,28 +519,11 @@ class RoomManager: ObservableObject{
         
         socket.on("remove_song") { data, ack in
             print("➖ Song removed from queue")
-            if let payload = data.first as? [String: Any],
-               let removedUuid = payload["song"] as? String {
-                DispatchQueue.main.async {
-                    // Remove specific song without affecting order of other songs
-                    self.queueManager?.removeSongFromQueue(removedUuid)
-                    print("🔄 Removed song \(removedUuid) from queue")
-                    
-                    // Check if we should trigger autoplay after removing the song
-                    if let queueManager = self.queueManager {
-                        queueManager.checkAndTriggerAutoplay(roomManager: self)
-                    }
-                }
-            } else {
-                // Fallback to full refresh if we don't have the UUID
-                self.queueManager?.fetchQueue {
-                    print("🔄 Queue updated after song removal (fallback)")
-                    // Check autoplay after queue refresh
-                    DispatchQueue.main.async {
-                        if let queueManager = self.queueManager {
-                            queueManager.checkAndTriggerAutoplay(roomManager: self)
-                        }
-                    }
+            // Immediately refresh queue
+            self.queueManager?.fetchQueue {
+                print("🔄 Queue refreshed after song removed")
+                if let queueManager = self.queueManager {
+                    queueManager.checkAndTriggerAutoplay(roomManager: self)
                 }
             }
         }
@@ -507,73 +537,35 @@ class RoomManager: ObservableObject{
                 
                 // Try to get downvotes array from payload if available
                 let downvotesArray = payload["downvotes_array"] as? [String]
-                print("🔍 Downvotes array from socket: \(downvotesArray ?? [])")
-                print("🔍 Full socket payload: \(payload)")
                 
                 DispatchQueue.main.async {
                     // Check if this is the current song
                     let currentSongUuid = self.currentSong["uuid"] as? String
-                    let queueManagerCurrentSongUuid = self.queueManager?.currentSong["uuid"] as? String
-                    let isCurrentSong = (currentSongUuid == songUuid) || (queueManagerCurrentSongUuid == songUuid)
+                    let isCurrentSong = currentSongUuid == songUuid
                     
-                    print("🔍 RoomManager current song UUID: \(currentSongUuid ?? "nil")")
-                    print("🔍 QueueManager current song UUID: \(queueManagerCurrentSongUuid ?? "nil")")
-                    print("🔍 Socket event song UUID: \(songUuid)")
-                    print("🔍 Is current song: \(isCurrentSong)")
-                    
-                    if downvotesArray != nil {
+                    if let downvotesArray = downvotesArray {
                         // If we have the complete downvotes array, update immediately
                         self.queueManager?.updateSongDownvoteCount(songUuid: songUuid, newDownvoteCount: downvotes, downvotesArray: downvotesArray)
                         
                         if isCurrentSong {
-                            print("🎯 Updating current song data with array")
                             self.updateCurrentSongDownvoteData(downvotes: downvotes)
                         }
-                    } else {
-                        // Socket event doesn't include downvotes array - need to fetch fresh data
-                        print("⚠️ No downvotes array in socket event - fetching fresh data")
-                        
-                        if isCurrentSong {
-                            // For current song, fetch current song data to get the downvotes array
-                            print("🔄 Fetching current song data to get accurate downvotes array")
-                            self.queueManager?.fetchCurrentSong {
-                                DispatchQueue.main.async {
-                                    // Update current song references
-                                    self.currentSong = self.queueManager?.currentSong ?? [:]
-                                    self.queueManager?.objectWillChange.send()
-                                    print("✅ Current song data refreshed with downvotes array")
-                                }
-                            }
-                        } else {
-                            // For queue songs, fetch the full queue to get updated downvotes arrays
-                            print("🔄 Fetching queue data to get accurate downvotes arrays")
-                            self.queueManager?.fetchQueue {
-                                print("✅ Queue data refreshed with downvotes arrays")
-                            }
-                        }
                     }
+                    // If no downvotes array, periodic sync will handle the update
                 }
-            } else {
-                print("❌ Invalid downvote socket event payload")
-                print("❌ Raw data: \(data)")
             }
         }
         
         socket.on("delete_song_from_queue") { data, ack in
             print("🗑️ Song deleted from queue due to downvotes")
-            if let payload = data.first as? [String: Any],
-               let deletedUuid = payload["uuid"] as? String {
-                print("🗑️ Deleted song UUID: \(deletedUuid)")
-                
-                DispatchQueue.main.async {
-                    // Remove specific song without affecting order of other songs
-                    self.queueManager?.removeSongFromQueue(deletedUuid)
-                    print("🔄 Removed song \(deletedUuid) due to downvotes")
-                    
-                    // Check if we should trigger autoplay after removing the song
-                    if let queueManager = self.queueManager {
-                        queueManager.checkAndTriggerAutoplay(roomManager: self)
-                    }
+            // Immediately refresh queue and current song
+            self.queueManager?.fetchCurrentSong {
+                self.currentSong = self.queueManager?.currentSong ?? [:]
+            }
+            self.queueManager?.fetchQueue {
+                print("🔄 Queue refreshed after song deleted from downvotes")
+                if let queueManager = self.queueManager {
+                    queueManager.checkAndTriggerAutoplay(roomManager: self)
                 }
             }
         }
@@ -582,13 +574,8 @@ class RoomManager: ObservableObject{
             print("👋 Someone left the room")
             if let payload = data.first as? [String: Any],
                let leftEmail = payload["email"] as? String {
-                
                 print("User left: \(leftEmail)")
-                
-                // Add a small delay to ensure server state is updated
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.getRoomInfo()
-                }
+                // Periodic sync will handle member list update
             }
         }
         
@@ -596,13 +583,8 @@ class RoomManager: ObservableObject{
             print("👋 Someone joined the room")
             if let payload = data.first as? [String: Any],
                let joinedEmail = payload["email"] as? String {
-                
                 print("User joined: \(joinedEmail)")
-                
-                // Add a small delay to ensure server state is updated
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.getRoomInfo()
-                }
+                // Periodic sync will handle member list update
             }
         }
         

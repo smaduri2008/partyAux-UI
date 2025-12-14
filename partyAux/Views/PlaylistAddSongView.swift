@@ -21,73 +21,89 @@ struct PlaylistAddSongView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
-                // Search bar
+                // Premium Search bar
                 VStack(spacing: 0) {
                     HStack(spacing: 8) {
                         HStack {
                             Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
+                                .foregroundColor(.electricCyan)
                             TextField("Search YouTube...", text: $searchText)
                                 .foregroundColor(.white)
+                                .font(Font.premium(size: 16))
                                 .placeholder(when: searchText.isEmpty) {
-                                    Text("Search YouTube...").foregroundColor(.gray)
+                                    Text("Search YouTube...").foregroundColor(.white.opacity(0.4))
                                 }
                                 .autocapitalization(.none)
                                 .onChange(of: searchText, perform: handleSearchTextChange)
                         }
-                        .padding(10)
-                        .background(Color(red: 0.1, green: 0.1, blue: 0.12))
-                        .cornerRadius(8)
+                        .padding(14)
+                        .background(Color.appCardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
                     }
-                    .padding(.horizontal)
-                    // Suggestions dropdown
+                    .padding(.horizontal, 20)
+                    
+                    // Suggestions dropdown with premium styling
                     if showSuggestions && !suggestions.isEmpty {
                         VStack(spacing: 0) {
                             ForEach(suggestions, id: \.self) { suggestion in
                                 HStack {
                                     Image(systemName: "magnifyingglass")
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(.electricCyan.opacity(0.7))
                                         .font(.system(size: 14))
 
-                                    Text(suggestion)
+                                        Text(suggestion)
                                         .foregroundColor(.white)
-                                        .font(.system(size: 16))
+                                        .font(Font.premium(size: 15))
                                     Spacer()
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Color(red: 0.1, green: 0.1, blue: 0.12))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(Color.appCardBackground)
                                 .onTapGesture {
                                     selectSuggestion(suggestion)
                                 }
                                 if suggestion != suggestions.last {
-                                    Divider().background(Color.gray.opacity(0.2))
+                                    Divider().background(Color.white.opacity(0.1))
                                 }
                             }
                         }
-                        .background(Color(red: 0.1, green: 0.1, blue: 0.12))
-                        .cornerRadius(8)
-                        .shadow(color: Color.black.opacity(0.4), radius: 5, x: 0, y: 4)
-                        .padding(.horizontal)
-                        .padding(.top, 4)
+                        .background(Color.appCardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.5), radius: 10, x: 0, y: 5)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
                     }
                 }
 
-                // Loading indicator
+                // Loading indicator with premium styling
                 if isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .electricCyan))
+                        .scaleEffect(1.2)
+                        .padding(.top, 20)
                 }
 
-                // Error
+                // Error with premium styling
                 if let errorMessage = errorMessage {
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                        .padding(.horizontal)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.coralPink)
+                        Text(errorMessage)
+                            .foregroundColor(.coralPink)
+                            .font(Font.premium(size: 14))
+                    }
+                    .padding(.horizontal, 20)
                 }
 
-                // Song Results
+                // Song Results with premium styling
                 List {
                     ForEach(searchResults.indices, id: \.self) { index in
                         let item = searchResults[index]
@@ -105,26 +121,30 @@ struct PlaylistAddSongView: View {
                                 addSongToPlaylist(song: songToSend, index: index)
                             }
                         )
+                        .listRowBackground(Color.deepNavy)
+                        .listRowSeparatorTint(Color.white.opacity(0.1))
                     }
                 }
                 .listStyle(PlainListStyle())
+                .scrollContentBackground(.hidden)
                 .opacity(searchResults.isEmpty && !isLoading ? 0 : 1)
             }
             .padding(.top)
-            .background(Color.black.ignoresSafeArea())
+            .background(Color.deepNavy.ignoresSafeArea())
             .navigationBarTitle("Add Songs", displayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
                         presentationMode.wrappedValue.dismiss()
                     }
-                    .foregroundColor(.purple)
+                    .font(Font.premium(size: 16, weight: .medium))
+                    .foregroundColor(.electricCyan)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: performSearch) {
                         Image(systemName: "arrow.forward.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : Color.purple)
+                            .font(.system(size: 26))
+                            .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .white.opacity(0.3) : .electricCyan)
                     }
                     .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -307,67 +327,86 @@ struct SongRowForPlaylistView: View {
     @State private var isPressed = false
     
     var body: some View {
-        HStack {
-            // Thumbnail
+        HStack(spacing: 12) {
+            // Premium Thumbnail
             if let imageUrlString = item["album_art"] as? String,
                let imageUrl = URL(string: imageUrlString) {
                 AsyncImage(url: imageUrl) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    ProgressView()
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.appCardBackground)
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .electricCyan))
+                                .scaleEffect(0.6)
+                        )
                 }
-                .frame(width: 60, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .shadow(radius: 2)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
             } else {
-                Rectangle()
-                    .fill(Color.gray)
-                    .frame(width: 60, height: 60)
-                    .cornerRadius(8)
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.appCardBackground)
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundColor(.electricCyan.opacity(0.5))
+                    )
             }
             
-            // Song info
+            // Song info with premium styling
             VStack(alignment: .leading, spacing: 4) {
                 Text(item["title"] as? String ?? "No Title")
-                    .font(.headline)
+                    .font(Font.premium(size: 15, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text(item["artist"] as? String ?? "No Artist")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
+                        .font(Font.premium(size: 13))
+                        .foregroundColor(.white.opacity(0.6))
                         .lineLimit(1)
                     
                     if let durationStr = item["duration"] as? String {
-                        Text("• \(formatDuration(durationStr))")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
+                        Text("•")
+                            .foregroundColor(.white.opacity(0.4))
+                        Text(formatDuration(durationStr))
+                            .font(Font.premium(size: 13))
+                            .foregroundColor(.white.opacity(0.5))
                     }
                 }
             }
             
             Spacer()
             
-            // Plus button
+            // Premium Plus button
             Button(action: onAddSong) {
                 if addingSongId == (item["video_id"] as? String ?? item["url"] as? String) {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
-                        .scaleEffect(0.8)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .electricCyan))
+                        .scaleEffect(0.7)
                 } else {
-                    Image(systemName: "plus.circle.fill")
-                        .resizable()
-                        .frame(width: 18, height: 18)
-                        .foregroundColor(Color.purple)
+                    ZStack {
+                        Circle()
+                            .fill(Color.electricCyan.opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.electricCyan)
+                    }
                 }
             }
             .buttonStyle(PlainButtonStyle())
         }
-        .padding(.vertical, 4)
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .scaleEffect(animatedIndex == index ? 0.9 : 1.0)
-        .contentShape(Rectangle()) // Make entire row tappable
+        .padding(.vertical, 6)
+        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
+        .contentShape(Rectangle())
         .onTapGesture {
             onAddSong()
         }

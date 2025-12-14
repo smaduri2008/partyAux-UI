@@ -26,12 +26,35 @@ struct ContentView: View {
         let authInstance = UserAuth()
         _auth = StateObject(wrappedValue: authInstance)
         _roomManager = StateObject(wrappedValue: RoomManager(userData: authInstance))
+        
+        // Configure Tab Bar appearance for premium look
+        let tabBarAppearance = UITabBarAppearance()
+        tabBarAppearance.configureWithOpaqueBackground()
+        tabBarAppearance.backgroundColor = UIColor(Color.deepNavy)
+        tabBarAppearance.shadowColor = .clear
+        
+        // Unselected state
+        tabBarAppearance.stackedLayoutAppearance.normal.iconColor = UIColor.white.withAlphaComponent(0.4)
+        tabBarAppearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.white.withAlphaComponent(0.4),
+            .font: UIFont.systemFont(ofSize: 10, weight: .medium)
+        ]
+        
+        // Selected state
+        tabBarAppearance.stackedLayoutAppearance.selected.iconColor = UIColor(Color.electricCyan)
+        tabBarAppearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor(Color.electricCyan),
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold)
+        ]
+        
+        UITabBar.appearance().standardAppearance = tabBarAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
     }
     
     var body: some View {
         ZStack {
-            // Animated Background
-            LinearGradient.backgroundGradient
+            // Premium Background
+            Color.deepNavy
                 .ignoresSafeArea()
                 .animation(.smooth, value: currentView)
             
@@ -42,7 +65,6 @@ struct ContentView: View {
                         LoadingView()
                     case .email:
                         EmailView()
-                        //AuthenticatedTabView()
                     case .username:
                         CreateUsernameView()
                     case .authenticated:
@@ -58,9 +80,8 @@ struct ContentView: View {
             .navigationViewStyle(StackNavigationViewStyle())
         }
         .environmentObject(auth)
-        .environmentObject(roomManager) // Add this line to provide RoomManager to all views
+        .environmentObject(roomManager)
         .onAppear {
-            auth.loadJWT()
             updateViewState()
         }
         .onChange(of: auth.authenticated) { _ in
@@ -105,17 +126,16 @@ struct ContentView: View {
                 }
                 .tag(1)
                 .environmentObject(auth)
-                .environmentObject(roomManager) // Add this line
+                .environmentObject(roomManager)
             
-            
-            // Settings Tab (Placeholder)
+            // Settings Tab
             SettingsTab()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
                 }
                 .tag(2)
                 .environmentObject(auth)
-                .environmentObject(roomManager) // Add this line if needed
+                .environmentObject(roomManager)
         }
         .onChange(of: selectedTab) { newTab in
             // Control player UI visibility and background state
@@ -125,12 +145,8 @@ struct ContentView: View {
             if let queueManager = roomManager.queueManager {
                 queueManager.isInBackground = (newTab != 0)
                 
-                // When returning to room tab, ensure music continues
                 if newTab == 0 {
-                    // Small delay to ensure UI is ready, then check if we need to resume
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        // The YouTube player should auto-resume if it was paused
-                        // This is handled by the YouTubePlayerView delegate
                         print("Returned to room tab - music should continue playing")
                     }
                 }
@@ -140,15 +156,48 @@ struct ContentView: View {
     
     @ViewBuilder
     private func LoadingView() -> some View {
-        VStack(spacing: 24) {
-            Text("PartyAux")
-                .font(.largeTitle)
-                .foregroundColor(.textPrimary)
-                .shimmer()
+        GeometryReader { geometry in
+            ZStack {
+                // Subtle gradient orbs sized relative to width
+                Circle()
+                    .fill(Color.electricCyan.opacity(0.15))
+                    .frame(width: min(geometry.size.width * 0.65, 250), height: min(geometry.size.width * 0.65, 250))
+                    .blur(radius: 60)
+                    .offset(x: -geometry.size.width * 0.12, y: -geometry.size.height * 0.12)
+
+                Circle()
+                    .fill(Color.softPurple.opacity(0.15))
+                    .frame(width: min(geometry.size.width * 0.5, 200), height: min(geometry.size.width * 0.5, 200))
+                    .blur(radius: 50)
+                    .offset(x: geometry.size.width * 0.2, y: geometry.size.height * 0.18)
             
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: .appPrimary))
-                .scaleEffect(1.2)
+            VStack(spacing: 30) {
+                // Premium logo area
+                    ZStack {
+                        Circle()
+                            .fill(Color.electricCyan)
+                            .frame(width: 80, height: 80)
+                            .blur(radius: 30)
+                            .opacity(0.4)
+
+                        LogoView(size: 88, hasBackground: true)
+                    }
+                
+                Text("PartyAux")
+                    .font(Font.premium(size: 36, weight: .bold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.white, .white.opacity(0.8)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .electricCyan))
+                    .scaleEffect(1.2)
+            }
+            }
         }
     }
     

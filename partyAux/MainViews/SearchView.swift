@@ -17,6 +17,7 @@ struct SearchView: View {
     @State private var showingAddToPlaylist = false
     @State private var selectedSongForPlaylist: [String: Any]?
     @State private var playlistManager: PlaylistManager?
+    @FocusState private var isSearchFocused: Bool
     
     @EnvironmentObject var queueManager: QueueManager
     @EnvironmentObject var roomManager: RoomManager
@@ -24,160 +25,208 @@ struct SearchView: View {
     init() {
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor.black
+        appearance.backgroundColor = UIColor(Color.appBackground)
         appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Spacing.md) {
             // Title
             HStack {
                 Text("Search")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(.headlineLarge)
+                    .foregroundColor(.textPrimary)
                 Spacer()
             }
-            .padding(.horizontal)
+            .padding(.horizontal, Spacing.lg)
 
             // Segment Control
-            Picker("Search Type", selection: $selectedSegment) {
-                Text("Songs").tag(0)
-                Text("Playlists").tag(1)
+            HStack(spacing: 0) {
+                SegmentButton(title: "Songs", icon: "music.note", isSelected: selectedSegment == 0) {
+                    withAnimation(.snappy) { selectedSegment = 0 }
+                    clearSearchResults()
+                }
+                SegmentButton(title: "Playlists", icon: "music.note.list", isSelected: selectedSegment == 1) {
+                    withAnimation(.snappy) { selectedSegment = 1 }
+                    clearSearchResults()
+                }
             }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding(.horizontal)
-            .onChange(of: selectedSegment) { _ in
-                clearSearchResults()
-            }
+            .padding(Spacing.xxs)
+            .background(Color.appElevated)
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+            .padding(.horizontal, Spacing.lg)
 
-            // Search bar + button inline
+            // Search bar
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    HStack {
+                HStack(spacing: Spacing.sm) {
+                    HStack(spacing: Spacing.sm) {
                         Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.textTertiary)
+                            .font(.system(size: 16, weight: .medium))
 
-                        TextField(selectedSegment == 0 ? "Search YouTube..." : "Search playlists...", text: $searchText)
-                            .foregroundColor(.white) // Changed to white
+                        TextField("", text: $searchText)
                             .placeholder(when: searchText.isEmpty) {
-                                Text(selectedSegment == 0 ? "Search YouTube..." : "Search playlists...")
-                                    .foregroundColor(.gray) // Changed to gray
+                                Text(selectedSegment == 0 ? "Search for songs..." : "Search playlists...")
+                                    .foregroundColor(.textMuted)
                             }
+                            .font(.bodyLarge)
+                            .foregroundColor(.textPrimary)
                             .autocapitalization(.none)
+                            .focused($isSearchFocused)
                             .onChange(of: searchText) { newValue in
                                 if selectedSegment == 0 {
                                     handleSearchTextChange(newValue)
                                 }
                             }
-                    }
-                    .padding(10)
-                    .background(Color(red: 0.1, green: 0.1, blue: 0.12)) // Dark background
-                    .cornerRadius(8)
-                    .shadow(color: Color.black.opacity(0.4), radius: 5, x: 0, y: 4) // Adjusted shadow
-                    .onTapGesture {
+                        
                         if !searchText.isEmpty {
-                            if selectedSegment == 0 {
-                                handleSearchTextChange(searchText)
+                            Button(action: {
+                                searchText = ""
+                                hideSuggestions()
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.textTertiary)
                             }
                         }
                     }
+                    .padding(Spacing.md)
+                    .background(Color.appCardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                            .strokeBorder(
+                                isSearchFocused ? LinearGradient.brandGradient : LinearGradient(colors: [.textMuted.opacity(0.2)], startPoint: .leading, endPoint: .trailing),
+                                lineWidth: isSearchFocused ? 2 : 1
+                            )
+                    )
 
                     Button(action: performSearch) {
-                        Image(systemName: "arrow.forward.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : Color.purple)
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? AnyShapeStyle(Color.appElevated)
+                                        : AnyShapeStyle(LinearGradient.brandGradient)
+                                )
+                                .frame(width: 48, height: 48)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .textMuted : .white)
+                        }
+                        .shadow(color: searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .clear : .brandPrimary.opacity(0.3), radius: 8, x: 0, y: 4)
                     }
                     .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, Spacing.lg)
 
-                // Suggestions dropdown (only for songs)
+                // Suggestions dropdown
                 if selectedSegment == 0 && showSuggestions && !suggestions.isEmpty {
                     VStack(spacing: 0) {
                         ForEach(suggestions, id: \.self) { suggestion in
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.gray)
-                                    .font(.system(size: 14))
+                            HStack(spacing: Spacing.sm) {
+                                Image(systemName: "arrow.up.right")
+                                    .foregroundColor(.textTertiary)
+                                    .font(.system(size: 12))
                                 
                                 Text(suggestion)
-                                    .foregroundColor(.white) // Changed to white
-                                    .font(.system(size: 16))
+                                    .font(.bodyMedium)
+                                    .foregroundColor(.textPrimary)
                                 
                                 Spacer()
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color(red: 0.1, green: 0.1, blue: 0.12)) // Dark background
+                            .padding(.horizontal, Spacing.md)
+                            .padding(.vertical, Spacing.sm)
+                            .contentShape(Rectangle())
                             .onTapGesture {
                                 selectSuggestion(suggestion)
                             }
                             
                             if suggestion != suggestions.last {
                                 Divider()
-                                    .background(Color.gray.opacity(0.2)) // Adjusted divider
+                                    .background(Color.textMuted.opacity(0.2))
                             }
                         }
                     }
-                    .background(Color(red: 0.1, green: 0.1, blue: 0.12)) // Dark background
-                    .cornerRadius(8)
-                    .shadow(color: Color.black.opacity(0.4), radius: 5, x: 0, y: 4) // Adjusted shadow
-                    .padding(.horizontal)
-                    .padding(.top, 4)
+                    .background(Color.appCardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                            .strokeBorder(Color.textMuted.opacity(0.2), lineWidth: 1)
+                    )
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.top, Spacing.xs)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
 
             // Loading indicator
             if isLoading || isLoadingPlaylists {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
+                HStack(spacing: Spacing.sm) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .brandPrimary))
+                    Text("Searching...")
+                        .font(.labelMedium)
+                        .foregroundColor(.textSecondary)
+                }
+                .padding(.vertical, Spacing.lg)
             }
 
             // Error
             if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .padding(.horizontal)
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(.error)
+                    Text(errorMessage)
+                        .font(.labelMedium)
+                        .foregroundColor(.error)
+                }
+                .padding(.horizontal, Spacing.lg)
             }
 
             // Results
             if selectedSegment == 0 {
                 // Song Results
-                List {
-                    ForEach(searchResults.indices, id: \.self) { index in
-                        let item = searchResults[index]
-                        SongRowView(item: item, index: index, animatedIndex: $animatedIndex) {
-                            addToLocalQueue(song: item)
-                        } onLongPress: {
-                            selectedSongForPlaylist = item
-                            showingAddToPlaylist = true
+                if searchResults.isEmpty && !isLoading {
+                    EmptySearchState(segment: 0)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: Spacing.sm) {
+                            ForEach(searchResults.indices, id: \.self) { index in
+                                let item = searchResults[index]
+                                SongRowView(item: item, index: index, animatedIndex: $animatedIndex) {
+                                    addToLocalQueue(song: item)
+                                } onLongPress: {
+                                    selectedSongForPlaylist = item
+                                    showingAddToPlaylist = true
+                                }
+                            }
                         }
-                        .listRowBackground(Color.black)
+                        .padding(.horizontal, Spacing.lg)
                     }
                 }
-                .listStyle(PlainListStyle())
-                .opacity(searchResults.isEmpty && !isLoading ? 0 : 1)
             } else {
                 // Playlist Results
-                List {
-                    ForEach(playlistResults) { playlist in
-                        NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager ?? PlaylistManager(userData: roomManager.userData))) {
-                            PlaylistRowView(playlist: playlist)
+                if playlistResults.isEmpty && !isLoadingPlaylists {
+                    EmptySearchState(segment: 1)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: Spacing.sm) {
+                            ForEach(playlistResults) { playlist in
+                                NavigationLink(destination: PlaylistDetailView(playlist: playlist, playlistManager: playlistManager ?? PlaylistManager(userData: roomManager.userData))) {
+                                    PlaylistRowView(playlist: playlist)
+                                }
+                            }
                         }
-                        .listRowBackground(Color.black)
+                        .padding(.horizontal, Spacing.lg)
                     }
                 }
-                .listStyle(PlainListStyle())
-                .opacity(playlistResults.isEmpty && !isLoadingPlaylists ? 0 : 1)
             }
         }
-        .padding(.top)
-        .background(Color.black.ignoresSafeArea())
+        .padding(.top, Spacing.sm)
+        .background(Color.appBackground.ignoresSafeArea())
         .onAppear {
-            // Initialize playlist manager with current user data
             if playlistManager == nil, let userData = roomManager.userData as? UserAuth {
                 playlistManager = PlaylistManager(userData: userData)
             }
@@ -427,6 +476,68 @@ struct SearchView: View {
     }
 }
 
+// MARK: - Segment Button
+struct SegmentButton: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                Text(title)
+                    .font(.labelLarge)
+            }
+            .foregroundColor(isSelected ? .white : .textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.sm)
+            .background(
+                isSelected
+                    ? LinearGradient.brandGradient
+                    : LinearGradient(colors: [.clear], startPoint: .leading, endPoint: .trailing)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.small, style: .continuous))
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+// MARK: - Empty Search State
+struct EmptySearchState: View {
+    let segment: Int
+    
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(LinearGradient.brandGradient.opacity(0.1))
+                    .frame(width: 120, height: 120)
+                Image(systemName: segment == 0 ? "music.note.list" : "rectangle.stack.fill")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundStyle(LinearGradient.brandGradient)
+            }
+            
+            VStack(spacing: Spacing.xs) {
+                Text(segment == 0 ? "Search for songs" : "Search for playlists")
+                    .font(.titleMedium)
+                    .foregroundColor(.textPrimary)
+                Text(segment == 0 ? "Find your favorite tracks to add to the queue" : "Discover playlists from other users")
+                    .font(.bodyMedium)
+                    .foregroundColor(.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, Spacing.xl)
+    }
+}
+
 struct SongRowView: View {
     let item: [String: Any]
     let index: Int
@@ -436,7 +547,7 @@ struct SongRowView: View {
     @State private var isPressed = false
     
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: Spacing.sm) {
             // Thumbnail
             if let imageUrlString = item["album_art"] as? String,
                let imageUrl = URL(string: imageUrlString) {
@@ -445,54 +556,76 @@ struct SongRowView: View {
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    ProgressView()
+                    RoundedRectangle(cornerRadius: CornerRadius.small)
+                        .fill(Color.appElevated)
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .textTertiary))
+                        )
                 }
-                .frame(width: 60, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .shadow(radius: 2)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.small, style: .continuous))
             } else {
-                Rectangle()
-                    .fill(Color.gray)
-                    .frame(width: 60, height: 60)
-                    .cornerRadius(8)
+                RoundedRectangle(cornerRadius: CornerRadius.small, style: .continuous)
+                    .fill(Color.appElevated)
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundColor(.textTertiary)
+                    )
             }
 
             // Song info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(item["title"] as? String ?? "No Title")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(.titleSmall)
+                    .foregroundColor(.textPrimary)
+                    .lineLimit(1)
 
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.xs) {
                     Text(item["artist"] as? String ?? "No Artist")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
+                        .font(.bodySmall)
+                        .foregroundColor(.textSecondary)
+                        .lineLimit(1)
 
                     if let durationStr = item["duration"] as? String {
-                        Text("• \(formatDuration(durationStr))")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
+                        Text("•")
+                            .foregroundColor(.textMuted)
+                        Text(formatDuration(durationStr))
+                            .font(.bodySmall)
+                            .foregroundColor(.textTertiary)
                     }
                 }
             }
 
             Spacer()
 
-            // Plus button
+            // Add button
             Button(action: {
                 triggerHapticAndAnimation()
                 onTap()
             }) {
-                Image(systemName: "plus.circle.fill")
-                    .resizable()
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(Color.purple)
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient.brandGradient)
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .shadow(color: .brandPrimary.opacity(0.3), radius: 6, x: 0, y: 3)
             }
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(ScaleButtonStyle())
         }
-        .padding(.vertical, 4)
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .scaleEffect(animatedIndex == index ? 0.9 : 1.0)
+        .padding(Spacing.sm)
+        .background(Color.appCardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                .strokeBorder(Color.textMuted.opacity(0.1), lineWidth: 1)
+        )
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
         .contentShape(Rectangle())
         .onTapGesture {
             triggerHapticAndAnimation()
@@ -506,12 +639,12 @@ struct SongRowView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
-                    withAnimation(.easeInOut(duration: 0.1)) {
+                    withAnimation(.snappy) {
                         isPressed = true
                     }
                 }
                 .onEnded { _ in
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    withAnimation(.snappy) {
                         isPressed = false
                     }
                 }
@@ -519,26 +652,23 @@ struct SongRowView: View {
     }
     
     private func triggerHapticAndAnimation() {
-        // Haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
 
-        // Press animation
-        withAnimation(.easeInOut(duration: 0.1)) {
+        withAnimation(.snappy) {
             isPressed = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(.snappy) {
                 isPressed = false
             }
         }
 
-        // Plus button animation (existing functionality)
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.snappy) {
             animatedIndex = index
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.snappy) {
                 animatedIndex = nil
             }
         }
@@ -562,19 +692,5 @@ struct SongRowView: View {
         }
 
         return String(format: "%d:%02d", minutes, seconds)
-    }
-}
-
-// Custom placeholder modifier so we can set color
-extension View {
-    func placeholder<Content: View>(
-        when shouldShow: Bool,
-        alignment: Alignment = .leading,
-        @ViewBuilder placeholder: () -> Content) -> some View {
-
-        ZStack(alignment: alignment) {
-            placeholder().opacity(shouldShow ? 1 : 0)
-            self
-        }
     }
 }

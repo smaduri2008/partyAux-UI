@@ -29,8 +29,8 @@ class QueueManager: ObservableObject {
     }
 
     func fetchCurrentSong(completion: @escaping () -> Void) {
-        self.currentSong = [:]
-        QueueManager.sendPostRequest(body: ["jwt": self.jwt_auth, "room": self.room], endpoint: "/get-current-song") { result in
+        // Don't clear currentSong here to prevent UI flashing
+        NetworkManager.shared.post(endpoint: "/get-current-song", body: ["jwt": self.jwt_auth, "room": self.room]) { result in
             if let result = result {
                 DispatchQueue.main.async {
                     self.currentSong = result["song"] as? [String: Any] ?? [:]
@@ -49,7 +49,7 @@ class QueueManager: ObservableObject {
     
     func updateSongDownvoteCount(songUuid: String, newDownvoteCount: Int, downvotesArray: [String]? = nil) {
         DispatchQueue.main.async {
-            print("🔄 updateSongDownvoteCount called for \(songUuid) with count \(newDownvoteCount)")
+            var shouldNotify = false
             
             // Update the song in the queue without changing order
             if var songData = self.queue[songUuid] {
@@ -59,48 +59,29 @@ class QueueManager: ObservableObject {
                 // Update downvotes array if provided
                 if let downvotesArray = downvotesArray {
                     songData["downvotes"] = downvotesArray
-                    print("✅ Updated downvotes array for song \(songUuid): \(downvotesArray)")
-                } else {
-                    print("⚠️ No downvotes array provided for song \(songUuid)")
                 }
                 
                 self.queue[songUuid] = songData
-                print("✅ Updated downvote count for song \(songUuid) to \(newDownvoteCount)")
+                shouldNotify = true
             }
             
             // Also update current song if it matches
             if let currentSongUuid = self.currentSong["uuid"] as? String,
                currentSongUuid == songUuid {
-                print("🔄 Updating current song downvote data")
                 
-                let oldDownvotes = self.currentSong["downvotes"] as? [String] ?? []
                 self.currentSong["downvote_count"] = newDownvoteCount
                 
                 // Update downvotes array for current song if provided
                 if let downvotesArray = downvotesArray {
                     self.currentSong["downvotes"] = downvotesArray
-                    print("✅ Updated current song downvotes array: \(downvotesArray)")
-                } else {
-                    // If no downvotes array provided, fetch current song to get updated data
-                    print("🔄 No downvotes array provided, fetching current song")
-                    self.fetchCurrentSong {
-                        print("✅ Current song refreshed in updateSongDownvoteCount")
-                        // Force UI update by triggering objectWillChange
-                        DispatchQueue.main.async {
-                            self.objectWillChange.send()
-                        }
-                    }
-                    return // Exit early since fetchCurrentSong will trigger the update
+                    shouldNotify = true
                 }
-                
-                let newDownvotes = self.currentSong["downvotes"] as? [String] ?? []
-                print("✅ Updated current song downvote count to \(newDownvoteCount)")
-                print("🔍 Old downvotes: \(oldDownvotes)")
-                print("🔍 New downvotes: \(newDownvotes)")
             }
             
-            // Force UI update
-            self.objectWillChange.send()
+            // Single notification at the end if any changes were made
+            if shouldNotify {
+                self.objectWillChange.send()
+            }
         }
     }
     
@@ -111,14 +92,11 @@ class QueueManager: ObservableObject {
                 if !self.queueOrder.contains(uuid) {
                     self.queue[uuid] = songData
                     self.queueOrder.append(uuid)
-                    print("✅ Added song \(uuid) to queue at position \(self.queueOrder.count)")
+                    self.objectWillChange.send()
                 } else {
                     // Update existing song data but don't add to order again
                     self.queue[uuid] = songData
-                    print("⚠️ Song \(uuid) already in queue, updating data only")
                 }
-                print("Current queue order: \(self.queueOrder)")
-                self.objectWillChange.send()
             }
         }
     }
@@ -128,9 +106,7 @@ class QueueManager: ObservableObject {
             self.queue.removeValue(forKey: songUuid)
             if let index = self.queueOrder.firstIndex(of: songUuid) {
                 self.queueOrder.remove(at: index)
-                print("✅ Removed song \(songUuid) from queue at index \(index)")
             }
-            print("Current queue order: \(self.queueOrder)")
             self.objectWillChange.send()
         }
     }
@@ -141,57 +117,39 @@ class QueueManager: ObservableObject {
                let songData = self.queue[firstSongUuid] {
                 // Store the song before removing it
                 self.lastPlayedSong = songData
-                print("📀 Stored last played song: \(songData["title"] as? String ?? "Unknown")")
                 
                 self.queue.removeValue(forKey: firstSongUuid)
                 self.queueOrder.removeFirst()
-                print("✅ Removed first song \(firstSongUuid) from queue")
-                print("Current queue order: \(self.queueOrder)")
                 self.objectWillChange.send()
             }
         }
     }
     
     func fetchQueue(completion: @escaping () -> Void) {
-        print("🔄 Fetching queue...")
-        QueueManager.sendPostRequest(body: ["jwt": self.jwt_auth, "room": self.room], endpoint: "/get-queue") { result in
+        NetworkManager.shared.post(endpoint: "/get-queue", body: ["jwt": self.jwt_auth, "room": self.room]) { result in
             if let result = result {
                 DispatchQueue.main.async {
-                    // Clear the existing queue and order
-                    self.queue.removeAll()
-                    self.queueOrder.removeAll()
-                    
                     if let songList = result["queue"] as? [[String: Any]] {
-                        print("📦 Received \(songList.count) songs from server")
-                        
+                        var newQueue: [String: [String: Any]] = [:]
+                        var newQueueOrder: [String] = []
                         var seenIDs = Set<String>()
                         
-                        for (index, song) in songList.enumerated() {
+                        for song in songList {
                             let uniqueID = song["uuid"] as? String ?? UUID().uuidString
                             
-                            // Skip if we've already seen this ID (prevent duplicates)
+                            // Skip duplicates
                             if seenIDs.contains(uniqueID) {
-                                print("⚠️ Skipping duplicate song ID: \(uniqueID)")
                                 continue
                             }
                             seenIDs.insert(uniqueID)
                             
-                            // Validate that we have essential song data
-                            let title = song["title"] as? String ?? "Unknown Title"
-                            let artist = song["artist"] as? String ?? "Unknown Artist"
-                            
-                            print("📝 Processing song \(index + 1): \(title) by \(artist) (ID: \(uniqueID))")
-                            
-                            self.queue[uniqueID] = song
-                            self.queueOrder.append(uniqueID) // Maintain order
+                            newQueue[uniqueID] = song
+                            newQueueOrder.append(uniqueID)
                         }
-                        print("✅ Queue updated successfully with \(self.queue.count) songs")
-                        print("🔗 Queue order: \(self.queueOrder)")
                         
-                        // Debug: Check for any inconsistencies
-                        self.validateQueueConsistency()
-                    } else {
-                        print("⚠️ No queue data received or invalid format")
+                        // Atomically update the published properties
+                        self.queue = newQueue
+                        self.queueOrder = newQueueOrder
                     }
                     
                     // Force UI update
@@ -199,7 +157,6 @@ class QueueManager: ObservableObject {
                     completion()
                 }
             } else {
-                print("❌ Failed to fetch queue - no result received")
                 DispatchQueue.main.async {
                     completion()
                 }
@@ -208,7 +165,8 @@ class QueueManager: ObservableObject {
     }
 
     func nextSong(completion: @escaping () -> Void) {
-        print("jwt: \(self.jwt_auth)")
+        print("⏭️ Requesting next song from server")
+        print("jwt: \(self.jwt_auth.prefix(20))...")
         print("room code: \(self.room)")
         
         // Store current song as last played before transitioning
@@ -217,14 +175,36 @@ class QueueManager: ObservableObject {
             print("💿 Stored last played song from nextSong: \(currentSong["title"] as? String ?? "Unknown")")
         }
         
-        QueueManager.sendPostRequest(body: ["jwt": self.jwt_auth, "room": self.room], endpoint: "/next-song") { result in
+        NetworkManager.shared.post(endpoint: "/next-song", body: ["jwt": self.jwt_auth, "room": self.room]) { result in
             if let result = result {
+                print("✅ Server responded to next-song request: \(result)")
+                DispatchQueue.main.async {
+                    // Fetch both current song and queue to ensure proper sync
+                    let group = DispatchGroup()
+                    
+                    group.enter()
+                    self.fetchCurrentSong {
+                        print("✅ Current song fetched after next-song")
+                        group.leave()
+                    }
+                    
+                    group.enter()
+                    self.fetchQueue {
+                        print("✅ Queue fetched after next-song")
+                        group.leave()
+                    }
+                    
+                    group.notify(queue: .main) {
+                        // Force UI update after both fetches complete
+                        self.objectWillChange.send()
+                        completion()
+                    }
+                }
+            } else {
+                print("❌ Failed to go to next song")
                 DispatchQueue.main.async {
                     completion()
                 }
-            } else {
-                print("Failed to go to next song")
-                completion()
             }
         }
     }
@@ -240,61 +220,7 @@ class QueueManager: ObservableObject {
         }
     }
 
-    class func sendPostRequest(body: [String: String], endpoint: String, completion: @escaping ([String: Any]?) -> Void) {
-        guard let url = URL(string: "https://api.partyaux.party" + endpoint) else {
-            print("❌ Invalid URL: http://35.208.64.59\(endpoint)")
-            completion(nil)
-            return
-        }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            // 🔥 Network Error
-            if let error = error {
-                print("❌ Network error: \(error.localizedDescription)")
-                completion(nil)
-                return
-            }
-
-            // 🔍 HTTP Response (to get status code and headers)
-            if let httpResponse = response as? HTTPURLResponse {
-                print("✅ Response Status Code: \(httpResponse.statusCode)")
-                print("📦 Headers: \(httpResponse.allHeaderFields)")
-            }
-
-            // 📥 Check if data exists
-            guard let data = data else {
-                print("❌ No data received")
-                completion(nil)
-                return
-            }
-
-            // 🧪 Debug raw response body
-            if let rawString = String(data: data, encoding: .utf8) {
-                print("📄 Raw response body: \(rawString)")
-            }
-
-            // 🧠 Try JSON decoding
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    print("✅ Parsed JSON: \(json)")
-                    completion(json)
-                } else {
-                    print("❌ JSON was not a dictionary")
-                    completion(nil)
-                }
-            } catch {
-                print("❌ JSON parsing failed: \(error.localizedDescription)")
-                completion(nil)
-            }
-        }
-
-        task.resume()
-    }
     
     func triggerAutoplay(completion: @escaping (Bool) -> Void) {
         guard !lastPlayedSong.isEmpty else {
@@ -319,7 +245,7 @@ class QueueManager: ObservableObject {
             "last_song": lastSongData
         ]
         
-        QueueManager.sendComplexPostRequest(body: requestBody, endpoint: "/add-song-autoplay") { result in
+        NetworkManager.shared.post(endpoint: "/add-song-autoplay", body: requestBody) { result in
             DispatchQueue.main.async {
                 if let result = result {
                     print("🎵 AUTOPLAY API RESPONSE:")
@@ -346,68 +272,7 @@ class QueueManager: ObservableObject {
         }
     }
     
-    class func sendComplexPostRequest(body: [String: Any], endpoint: String, completion: @escaping ([String: Any]?) -> Void) {
-        guard let url = URL(string: "https://api.partyaux.party" + endpoint) else {
-            print("❌ Invalid URL: http://35.208.64.59\(endpoint)")
-            completion(nil)
-            return
-        }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        } catch {
-            print("❌ Error encoding request body: \(error)")
-            completion(nil)
-            return
-        }
-
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            // 🔥 Network Error
-            if let error = error {
-                print("❌ Network error: \(error.localizedDescription)")
-                completion(nil)
-                return
-            }
-
-            // 🔍 HTTP Response (to get status code and headers)
-            if let httpResponse = response as? HTTPURLResponse {
-                print("✅ Response Status Code: \(httpResponse.statusCode)")
-                print("📦 Headers: \(httpResponse.allHeaderFields)")
-            }
-
-            // 📥 Check if data exists
-            guard let data = data else {
-                print("❌ No data received")
-                completion(nil)
-                return
-            }
-
-            // 🧪 Debug raw response body
-            if let rawString = String(data: data, encoding: .utf8) {
-                print("📄 Raw response body: \(rawString)")
-            }
-
-            // 🧠 Try JSON decoding
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    print("✅ Parsed JSON: \(json)")
-                    completion(json)
-                } else {
-                    print("❌ JSON was not a dictionary")
-                    completion(nil)
-                }
-            } catch {
-                print("❌ JSON parsing failed: \(error.localizedDescription)")
-                completion(nil)
-            }
-        }
-
-        task.resume()
-    }
     
     // MARK: - Debug Helper
     private func validateQueueConsistency() {

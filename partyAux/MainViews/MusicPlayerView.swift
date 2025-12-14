@@ -24,6 +24,10 @@ struct MusicPlayerView: View {
     @State private var showControls = true
     @State private var isLiked = false
     @State private var isDisliked = false
+    @State private var currentTime: Float = 0
+    @State private var duration: Float = 0
+    @State private var isBuffering = false
+    @AppStorage("showYouTubeEmbed") private var showYouTubeEmbed = false
 
     @ObservedObject var roomManager: RoomManager
     
@@ -44,25 +48,54 @@ struct MusicPlayerView: View {
 
     var body: some View {
         ZStack {
-            YouTubePlayerView(
-                videoID: currentVideoID,
-                playerVars: playerVars,
-                playerInstance: $youtubePlayer,
-                queueManager: queueManager,
-                roomManager: roomManager,
-                playerReady: $playerReady,
-                songCurrentlyPlaying: $songCurrentlyPlaying
-            )
-            .frame(height: 250)
-            .cornerRadius(12)
-            .shadow(radius: 5)
-            .offset(x: UIScreen.main.bounds.width, y: UIScreen.main.bounds.height)
-            .zIndex(0)
-            
             if showPlayerUI {
                 LinearGradient.backgroundGradient
                     .ignoresSafeArea()
-                
+            }
+            
+            if showYouTubeEmbed {
+                VStack {
+                    Spacer()
+                    
+                    YouTubePlayerView(
+                        videoID: currentVideoID,
+                        playerVars: playerVars,
+                        playerInstance: $youtubePlayer,
+                        queueManager: queueManager,
+                        roomManager: roomManager,
+                        playerReady: $playerReady,
+                        songCurrentlyPlaying: $songCurrentlyPlaying,
+                        currentTime: $currentTime,
+                        duration: $duration,
+                        isBuffering: $isBuffering
+                    )
+                    .frame(height: 250)
+                    .cornerRadius(12)
+                    .shadow(radius: 10)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 50)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .zIndex(10)
+            } else {
+                YouTubePlayerView(
+                    videoID: currentVideoID,
+                    playerVars: playerVars,
+                    playerInstance: $youtubePlayer,
+                    queueManager: queueManager,
+                    roomManager: roomManager,
+                    playerReady: $playerReady,
+                    songCurrentlyPlaying: $songCurrentlyPlaying,
+                    currentTime: $currentTime,
+                    duration: $duration,
+                    isBuffering: $isBuffering
+                )
+                .frame(height: 250)
+                .offset(x: UIScreen.main.bounds.width, y: UIScreen.main.bounds.height)
+                .zIndex(0)
+            }
+            
+            if showPlayerUI {
                 if !isSearching && !isQueueVisible && !isMembersVisible && !isSettingsVisible {
                     MainPlayerView(
                         albumArtURL: $albumArtURL,
@@ -74,8 +107,13 @@ struct MusicPlayerView: View {
                         showControls: $showControls,
                         isLiked: $isLiked,
                         isDisliked: $isDisliked,
+                        showYouTubeEmbed: $showYouTubeEmbed,
+                        currentTime: $currentTime,
+                        duration: $duration,
+                        isBuffering: isBuffering,
                         queueManager: queueManager,
                         roomManager: roomManager,
+                        youtubePlayer: youtubePlayer,
                         togglePlayPause: togglePlayPause,
                         playCurrentSong: playCurrentSong,
                         skipToNext: skipToNext,
@@ -112,8 +150,7 @@ struct MusicPlayerView: View {
                 }
                 
                 if isMembersVisible {
-                    MembersOverlayView(isMembersVisible: $isMembersVisible)
-                        .environmentObject(roomManager)
+                    MembersOverlayView(isMembersVisible: $isMembersVisible, roomManager: roomManager)
                         .transition(.asymmetric(
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .move(edge: .leading).combined(with: .opacity)
@@ -136,11 +173,12 @@ struct MusicPlayerView: View {
         .animation(.springy, value: isQueueVisible)
         .animation(.springy, value: isMembersVisible)
         .animation(.springy, value: isSettingsVisible)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showYouTubeEmbed)
         .onAppear {
             setupPlayer()
         }
-        .onChange(of: roomManager.currentSong["url"] as? String ?? "") { newVideoID in
-            print("uuid: \(roomManager.currentSong["uuid"]) || added by: \(roomManager.currentSong["addedBy"])")
+        .onChange(of: queueManager.currentSong["url"] as? String ?? "") { newVideoID in
+            print("uuid: \(queueManager.currentSong["uuid"] ?? "nil") || added by: \(queueManager.currentSong["addedBy"] ?? "nil")")
             handleSongChange(newVideoID)
         }
         .onChange(of: queueManager.queueOrder) { _ in
@@ -158,6 +196,37 @@ struct MusicPlayerView: View {
         }
         .onChange(of: songCurrentlyPlaying) { isPlaying in
             print("🎵 songCurrentlyPlaying changed to: \(isPlaying)")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("FirstSongAdded"))) { _ in
+            print("🎵 First song added notification received")
+            
+            // Sync with queueManager's current song
+            DispatchQueue.main.async {
+                let newVideoID = self.queueManager.currentSong["url"] as? String ?? ""
+                print("🎵 queueManager.currentSong url: '\(newVideoID)'")
+                
+                if !newVideoID.isEmpty && newVideoID != self.currentVideoID {
+                    print("🎵 Updating currentVideoID from notification: \(newVideoID)")
+                    self.currentVideoID = newVideoID
+                    
+                    // Update album art
+                    if let urlString = self.queueManager.currentSong["album_art"] as? String,
+                       let url = URL(string: urlString) {
+                        self.albumArtURL = url
+                    }
+                }
+                
+                // Give a moment for the video to load, then ensure it plays
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let player = self.youtubePlayer, self.playerReady {
+                        print("🎵 Triggering playback for first song")
+                        player.playVideo()
+                        self.isPlaying = true
+                    } else {
+                        print("🎵 Player not ready yet, will auto-play when ready")
+                    }
+                }
+            }
         }
     }
     
@@ -198,10 +267,9 @@ struct MusicPlayerView: View {
     }
    
     private func handleSongChange(_ newVideoID: String) {
-        roomManager.getRoomInfo()
         print("Current song URL changed: \(newVideoID)")
         if !newVideoID.isEmpty && newVideoID != currentVideoID {
-            queueManager.currentSong = roomManager.currentSong
+            // queueManager.currentSong is already updated (it triggered this change)
             print("song changed in onChange")
             print("Updating currentVideoID to: \(newVideoID)")
             self.currentVideoID = newVideoID
@@ -226,19 +294,46 @@ struct MusicPlayerView: View {
     }
    
     private func handleQueueChange() {
-        print("queue changed")
-        print("current video id: \(currentVideoID)")
-        print(songCurrentlyPlaying)
-        if currentVideoID.isEmpty &&
-            !songCurrentlyPlaying &&
-            (roomManager.currentSong["url"] as? String ?? "").isEmpty,
-           let firstSong = queueManager.queue.first,
-           let songDict = firstSong.value as? [String: Any],
-           let firstID = songDict["url"] as? String {
-            
-            print("queue changed, changing song")
-            queueManager.currentSong = songDict
-            currentVideoID = firstID
+        print("🔄 queue changed")
+        print("🔄 current video id: '\(currentVideoID)'")
+        print("🔄 songCurrentlyPlaying: \(songCurrentlyPlaying)")
+        print("🔄 queueManager.currentSong url: '\(queueManager.currentSong["url"] as? String ?? "")'")
+        print("🔄 roomManager.currentSong url: '\(roomManager.currentSong["url"] as? String ?? "")'")
+        print("🔄 queueOrder count: \(queueManager.queueOrder.count)")
+        
+        // Check if we need to set the current song
+        let noCurrentVideo = currentVideoID.isEmpty
+        let noSongPlaying = !songCurrentlyPlaying
+        let noRoomSong = (roomManager.currentSong["url"] as? String ?? "").isEmpty
+        let noQueueManagerSong = (queueManager.currentSong["url"] as? String ?? "").isEmpty
+        let hasQueuedSongs = !queueManager.queueOrder.isEmpty
+        
+        if noCurrentVideo && noSongPlaying && noRoomSong && noQueueManagerSong && hasQueuedSongs {
+            // Use queueOrder to get the actual first song (not random dictionary order)
+            if let firstSongUuid = queueManager.queueOrder.first,
+               let songDict = queueManager.queue[firstSongUuid],
+               let firstID = songDict["url"] as? String,
+               !firstID.isEmpty {
+                
+                print("🎵 Queue changed - setting first song as current")
+                queueManager.currentSong = songDict
+                currentVideoID = firstID
+                
+                // Update album art
+                if let urlString = songDict["album_art"] as? String,
+                   let url = URL(string: urlString) {
+                    albumArtURL = url
+                }
+                
+                // Ensure playback starts after video loads
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let player = self.youtubePlayer, self.playerReady {
+                        print("🎵 Starting playback for first song in queue")
+                        player.playVideo()
+                        self.isPlaying = true
+                    }
+                }
+            }
         }
     }
    
@@ -391,38 +486,13 @@ struct SearchOverlayView: View {
    
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                   
-                    withAnimation(.springy) {
-                        isSearching = false
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .medium))
-                        Text("Back")
-                            .font(.callout)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
+            OverlayHeader(title: "Search", isVisible: $isSearching)
            
             SearchView()
                 .environmentObject(queueManager)
                 .environmentObject(roomManager)
         }
-        .background(LinearGradient.backgroundGradient.ignoresSafeArea())
+        .background(Color.appBackground.ignoresSafeArea())
     }
 }
 
@@ -434,40 +504,17 @@ struct QueueOverlayView: View {
    
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                   
-                    withAnimation(.springy) {
-                        isQueueVisible = false
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .medium))
-                        Text("Back")
-                            .font(.callout)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
+            OverlayHeader(title: "Queue", isVisible: $isQueueVisible)
            
             QueueView()
                 .environmentObject(queueManager)
                 .environmentObject(roomManager)
         }
-        .background(LinearGradient.backgroundGradient.ignoresSafeArea())
+        .background(Color.appBackground.ignoresSafeArea())
     }
 }
+
+
 
 // MARK: - Settings Overlay View
 struct SettingsOverlayView: View {
@@ -477,46 +524,62 @@ struct SettingsOverlayView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                   
-                    withAnimation(.springy) {
-                        isSettingsVisible = false
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .medium))
-                        Text("Back")
-                            .font(.callout)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                }
-                
-                Spacer()
-                
-                Text("Settings")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.textPrimary)
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
+            OverlayHeader(title: "Settings", isVisible: $isSettingsVisible)
            
             SettingsView()
                 .environmentObject(userAuth)
                 .environmentObject(roomManager)
         }
-        .background(LinearGradient.backgroundGradient.ignoresSafeArea())
+        .background(Color.appBackground.ignoresSafeArea())
+    }
+}
+
+// MARK: - Overlay Header
+struct OverlayHeader: View {
+    let title: String
+    @Binding var isVisible: Bool
+    
+    var body: some View {
+        HStack {
+            Button(action: {
+                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                impactFeedback.impactOccurred()
+               
+                withAnimation(.springy) {
+                    isVisible = false
+                }
+            }) {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Back")
+                        .font(.labelLarge)
+                }
+                .foregroundColor(.textPrimary)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.sm)
+                .background(Color.appElevated)
+                .clipShape(Capsule())
+            }
+            
+            Spacer()
+            
+            Text(title)
+                .font(.titleMedium)
+                .foregroundColor(.textPrimary)
+            
+            Spacer()
+            
+            // Invisible placeholder for centering
+            Color.clear
+                .frame(width: 80, height: 36)
+        }
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.sm)
+        .background(
+            Color.appBackground
+                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+        )
     }
 }
 
@@ -531,9 +594,14 @@ struct MainPlayerView: View {
     @Binding var showControls: Bool
     @Binding var isLiked: Bool
     @Binding var isDisliked: Bool
+    @Binding var showYouTubeEmbed: Bool
+    @Binding var currentTime: Float
+    @Binding var duration: Float
+    let isBuffering: Bool
    
     @ObservedObject var queueManager: QueueManager
     @ObservedObject var roomManager: RoomManager
+    var youtubePlayer: YTPlayerView?
     let togglePlayPause: () -> Void
     let playCurrentSong: () -> Void
     let skipToNext: () -> Void
@@ -558,11 +626,21 @@ struct MainPlayerView: View {
                     
                     AlbumArtView(albumArtURL: albumArtURL)
                     SongInfoView(currentSong: queueManager.currentSong)
+                    
+                    // Progress Slider
+                    ProgressSliderView(
+                        currentTime: $currentTime,
+                        duration: duration,
+                        isHost: roomManager.isCurrentUserHost,
+                        youtubePlayer: youtubePlayer
+                    )
+                    
                     PlayerControlsView(
                         isPlaying: isPlaying,
                         isHost: roomManager.isCurrentUserHost,
                         isLiked: isLiked,
                         isDisliked: isDisliked,
+                        isBuffering: isBuffering,
                         queueManager: queueManager,
                         roomManager: roomManager,
                         togglePlayPause: togglePlayPause,
@@ -593,104 +671,70 @@ struct TopHeaderView: View {
     @State private var showLeaveAlert = false
    
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Image(systemName: roomManager.isCurrentUserHost ? "crown.fill" : "music.note.house.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(roomManager.isCurrentUserHost ? .yellow : .white)
+        VStack(spacing: Spacing.sm) {
+            // Room info badge
+            HStack(spacing: Spacing.xs) {
+                ZStack {
+                    Circle()
+                        .fill(roomManager.isCurrentUserHost ? Color.warning.opacity(0.2) : Color.brandPrimary.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: roomManager.isCurrentUserHost ? "crown.fill" : "music.note.house.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(roomManager.isCurrentUserHost ? .warning : .brandPrimary)
+                }
                
-                Text("Room: \(roomCode)")
-                    .font(.callout)
-                    .fontWeight(.bold)
-                    .foregroundColor(.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Room Code")
+                        .font(.labelSmall)
+                        .foregroundColor(.textTertiary)
+                    Text(roomCode)
+                        .font(.titleSmall)
+                        .foregroundColor(.textPrimary)
+                }
                
                 Spacer()
+                
+                if roomManager.isCurrentUserHost {
+                    Text("HOST")
+                        .font(.labelSmall)
+                        .foregroundColor(.warning)
+                        .padding(.horizontal, Spacing.sm)
+                        .padding(.vertical, Spacing.xxs)
+                        .background(Color.warning.opacity(0.15))
+                        .clipShape(Capsule())
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(20)
+            .padding(Spacing.sm)
+            .background(Color.appCardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(
-                        LinearGradient(
-                            gradient: Gradient(colors: roomManager.isCurrentUserHost ? [Color.yellow.opacity(0.5)] : [Color.white]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
+                RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                    .strokeBorder(
+                        roomManager.isCurrentUserHost ? Color.warning.opacity(0.3) : Color.textMuted.opacity(0.2),
                         lineWidth: 1
                     )
             )
            
-            HStack(spacing: 12) {
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                    withAnimation(.springy) { isMembersVisible.toggle() }
-                }) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .frame(width: 44, height: 44)
-                        .background(Color.appCardBackground)
-                        .cornerRadius(22)
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
-                }
-               
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                    withAnimation(.springy) { isSearching.toggle() }
-                }) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .frame(width: 44, height: 44)
-                        .background(Color.appCardBackground)
-                        .cornerRadius(22)
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
-                }
-               
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                    withAnimation(.springy) { isQueueVisible.toggle() }
-                }) {
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .frame(width: 44, height: 44)
-                        .background(Color.appCardBackground)
-                        .cornerRadius(22)
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
-                }
-               
-                Button(action: {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                    withAnimation(.springy) { isSettingsVisible.toggle() }
-                }) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.textPrimary)
-                        .frame(width: 44, height: 44)
-                        .background(Color.appCardBackground)
-                        .cornerRadius(22)
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.appSurface, lineWidth: 1))
-                }
-               
+            // Action buttons row
+            HStack(spacing: Spacing.sm) {
+                HeaderActionButton(icon: "person.2.fill", action: { isMembersVisible.toggle() })
+                HeaderActionButton(icon: "magnifyingglass", action: { isSearching.toggle() })
+                HeaderActionButton(icon: "music.note.list", action: { isQueueVisible.toggle() })
+                HeaderActionButton(icon: "gearshape.fill", action: { isSettingsVisible.toggle() })
+                
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                     impactFeedback.impactOccurred()
                     showLeaveAlert = true
                 }) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.red.opacity(0.8))
-                        .cornerRadius(22)
-                        .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color.red, lineWidth: 1))
+                    ZStack {
+                        Circle()
+                            .fill(Color.error.opacity(0.15))
+                            .frame(width: 48, height: 48)
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.error)
+                    }
                 }
                 .alert("Leave Room", isPresented: $showLeaveAlert) {
                     Button("Cancel", role: .cancel) { }
@@ -704,53 +748,121 @@ struct TopHeaderView: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
+        .padding(.horizontal, Spacing.lg)
+        .padding(.top, Spacing.sm)
+    }
+}
+
+// MARK: - Header Action Button
+struct HeaderActionButton: View {
+    let icon: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            withAnimation(.springy) { action() }
+        }) {
+            ZStack {
+                Circle()
+                    .fill(Color.appElevated)
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.textMuted.opacity(0.2), lineWidth: 1)
+                    )
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.textPrimary)
+            }
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+// MARK: - Scale Button Style
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+            .animation(.snappy, value: configuration.isPressed)
     }
 }
 
 // MARK: - Album Art View
 struct AlbumArtView: View {
     let albumArtURL: URL?
+    @State private var isAnimating = false
    
     var body: some View {
         ZStack {
+            // Animated background glow
             Circle()
-                .fill(LinearGradient.primaryGradient)
-                .frame(width: 240, height: 240)
-                .blur(radius: 30)
-                .opacity(0.3)
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            .brandPrimary.opacity(0.5),
+                            .brandSecondary.opacity(0.3),
+                            .clear
+                        ]),
+                        center: .center,
+                        startRadius: 50,
+                        endRadius: 180
+                    )
+                )
+                .frame(width: 320, height: 320)
+                .scaleEffect(isAnimating ? 1.1 : 1.0)
+                .opacity(isAnimating ? 0.8 : 0.6)
+                .animation(
+                    Animation.easeInOut(duration: 3).repeatForever(autoreverses: true),
+                    value: isAnimating
+                )
            
-            RoundedRectangle(cornerRadius: 20)
+            // Album art container
+            RoundedRectangle(cornerRadius: CornerRadius.xLarge, style: .continuous)
                 .fill(Color.appCardBackground)
-                .frame(width: 200, height: 200)
+                .frame(width: 260, height: 260)
                 .overlay(
                     Group {
                         if let albumArtURL = albumArtURL {
                             JFIFImageView(imageUrl: albumArtURL)
-                                .frame(width: 200, height: 200)
-                                .clipShape(RoundedRectangle(cornerRadius: 20))
+                                .frame(width: 260, height: 260)
+                                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.xLarge, style: .continuous))
                         } else {
-                            VStack {
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.textTertiary)
-                                Text("No Artwork")
-                                    .font(.caption)
+                            VStack(spacing: Spacing.sm) {
+                                ZStack {
+                                    Circle()
+                                        .fill(LinearGradient.brandGradient.opacity(0.2))
+                                        .frame(width: 80, height: 80)
+                                    Image(systemName: "music.note")
+                                        .font(.system(size: 36, weight: .medium))
+                                        .foregroundStyle(LinearGradient.brandGradient)
+                                }
+                                Text("No Song Playing")
+                                    .font(.bodyMedium)
                                     .foregroundColor(.textTertiary)
                             }
                         }
                     }
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing), lineWidth: 2)
+                    RoundedRectangle(cornerRadius: CornerRadius.xLarge, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 )
-                .shadow(color: Color.white.opacity(0.2), radius: 20, x: 0, y: 10)
+                .shadow(color: .brandPrimary.opacity(0.3), radius: 30, x: 0, y: 15)
         }
         .id(albumArtURL)
         .transition(.scale.combined(with: .opacity))
         .animation(.springy, value: albumArtURL)
+        .onAppear { isAnimating = true }
     }
 }
 
@@ -759,41 +871,146 @@ struct SongInfoView: View {
     let currentSong: [String: Any]
    
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Spacing.sm) {
             Text(currentSong["title"] as? String ?? "No Song Playing")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.headlineSmall)
                 .foregroundColor(.textPrimary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
            
             Text(currentSong["artist"] as? String ?? "Unknown Artist")
-                .font(.callout)
+                .font(.bodyLarge)
                 .foregroundColor(.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(1)
            
             if let album = currentSong["album"] as? String, !album.isEmpty {
                 Text(album)
-                    .font(.footnote)
+                    .font(.bodySmall)
                     .foregroundColor(.textTertiary)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
             }
             
             if let addedBy = currentSong["added_by"] as? String, !addedBy.isEmpty {
-                HStack(spacing: 4) {
+                HStack(spacing: Spacing.xxs) {
                     Image(systemName: "person.circle.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(.textTertiary)
                     Text("Added by \(addedBy)")
-                        .font(.caption)
-                        .foregroundColor(.textTertiary)
+                        .font(.labelSmall)
                 }
-                .padding(.top, 4)
+                .foregroundColor(.brandPrimary)
+                .padding(.horizontal, Spacing.sm)
+                .padding(.vertical, Spacing.xxs)
+                .background(Color.brandPrimary.opacity(0.15))
+                .clipShape(Capsule())
+                .padding(.top, Spacing.xxs)
             }
         }
         .animation(.smooth, value: currentSong["title"] as? String ?? "")
+    }
+}
+
+// MARK: - Progress Slider View
+struct ProgressSliderView: View {
+    @Binding var currentTime: Float
+    let duration: Float
+    let isHost: Bool
+    var youtubePlayer: YTPlayerView?
+    
+    @State private var isDragging = false
+    @State private var dragValue: Float = 0
+    
+    private var progress: Double {
+        guard duration > 0 else { return 0 }
+        let time = isDragging ? dragValue : currentTime
+        return Double(time) / Double(duration)
+    }
+    
+    private var displayTime: Float {
+        isDragging ? dragValue : currentTime
+    }
+    
+    var body: some View {
+        VStack(spacing: Spacing.sm) {
+            // Slider
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background track
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.appElevated)
+                        .frame(height: 8)
+                    
+                    // Progress track with gradient
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(LinearGradient.brandGradient)
+                        .frame(width: max(0, geometry.size.width * CGFloat(progress)), height: 8)
+                    
+                    // Thumb
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: isDragging ? 22 : 16, height: isDragging ? 22 : 16)
+                        .shadow(color: .brandPrimary.opacity(0.5), radius: isDragging ? 8 : 4, x: 0, y: 2)
+                        .offset(x: max(0, min(geometry.size.width - 16, geometry.size.width * CGFloat(progress) - 8)))
+                        .animation(.snappy, value: isDragging)
+                }
+                .frame(height: 22)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard isHost, duration > 0 else { return }
+                            
+                            if !isDragging {
+                                isDragging = true
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                impactFeedback.impactOccurred()
+                            }
+                            
+                            let percentage = Float(value.location.x / geometry.size.width)
+                            dragValue = max(0, min(duration, percentage * duration))
+                        }
+                        .onEnded { _ in
+                            guard isHost, duration > 0 else { return }
+                            
+                            isDragging = false
+                            
+                            // Seek to the new position
+                            youtubePlayer?.seek(toSeconds: dragValue, allowSeekAhead: true)
+                            currentTime = dragValue
+                            
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                            impactFeedback.impactOccurred()
+                        }
+                )
+            }
+            .frame(height: 22)
+            .opacity(duration > 0 ? 1 : 0.5)
+            
+            // Time labels
+            HStack {
+                Text(formatTime(displayTime))
+                    .font(.labelSmall)
+                    .foregroundColor(.textSecondary)
+                    .monospacedDigit()
+                
+                Spacer()
+                
+                Text(formatTime(duration))
+                    .font(.labelSmall)
+                    .foregroundColor(.textSecondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, Spacing.xxs)
+    }
+    
+    private func formatTime(_ seconds: Float) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
+        let totalSeconds = Int(seconds)
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 }
 
@@ -803,6 +1020,7 @@ struct PlayerControlsView: View {
     let isHost: Bool
     let isLiked: Bool
     let isDisliked: Bool
+    let isBuffering: Bool
     let queueManager: QueueManager
     let roomManager: RoomManager
     let togglePlayPause: () -> Void
@@ -828,20 +1046,19 @@ struct PlayerControlsView: View {
     }
    
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: Spacing.lg) {
             if !isHost {
-                HStack {
+                HStack(spacing: Spacing.xs) {
                     Image(systemName: "eye.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(.textTertiary)
                     Text("Listening Mode - Only the host can control playback")
-                        .font(.caption)
-                        .foregroundColor(.textTertiary)
+                        .font(.labelSmall)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(12)
+                .foregroundColor(.textSecondary)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.sm)
+                .background(Color.appElevated)
+                .clipShape(Capsule())
             }
             
             if !queueManager.currentSong.isEmpty {
@@ -852,91 +1069,90 @@ struct PlayerControlsView: View {
                 )
             }
             
-            HStack(spacing: 60) {
+            // Main controls row
+            HStack(spacing: Spacing.xl) {
+                // Downvote button
                 Button(action: toggleDislike) {
                     ZStack {
                         Circle()
-                            .fill(Color.white.opacity(0.2))
-                            .frame(width: 50, height: 50)
+                            .fill(hasUserDownvoted ? Color.error.opacity(0.2) : Color.appElevated)
+                            .frame(width: 56, height: 56)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.appSurface, lineWidth: 1)
+                                    .strokeBorder(
+                                        hasUserDownvoted ? Color.error.opacity(0.5) : Color.textMuted.opacity(0.3),
+                                        lineWidth: 1
+                                    )
                             )
                         
                         Image(systemName: hasUserDownvoted ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(hasUserDownvoted ? .red : .white)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(hasUserDownvoted ? .error : .textSecondary)
                             .scaleEffect(hasUserDownvoted ? 1.1 : 1.0)
-                            .animation(.bouncy, value: hasUserDownvoted)
                     }
                 }
                 .disabled(hasUserDownvoted)
-            }
-            
-            HStack(spacing: 40) {
+                .animation(.bouncy, value: hasUserDownvoted)
+                
+                // Play/Pause button
                 Button(action: {
-                    if isHost {
+                    if isHost && !isBuffering {
                         togglePlayPause()
                     }
                 }) {
                     ZStack {
                         Circle()
-                            .fill(LinearGradient(
-                                gradient: Gradient(colors: isHost ? [Color.white] : [Color.white.opacity(0.3)]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                            .frame(width: 80, height: 80)
+                            .fill(
+                                isHost ? LinearGradient.brandGradient : LinearGradient(colors: [.appElevated], startPoint: .leading, endPoint: .trailing)
+                            )
+                            .frame(width: 88, height: 88)
                             .shadow(
-                                color: isHost ? Color.white.opacity(0.4) : Color.clear,
-                                radius: 15,
+                                color: isHost ? .brandPrimary.opacity(0.5) : .clear,
+                                radius: 20,
                                 x: 0,
                                 y: 8
                             )
                        
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 32, weight: .bold))
-                            .foregroundColor(isHost ? .black : .gray)
-                            .offset(x: isPlaying ? 0 : 2)
+                        if isBuffering {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.5)
+                        } else {
+                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundColor(.white)
+                                .offset(x: isPlaying ? 0 : 3)
+                        }
                     }
                     .scaleEffect(1.0)
                     .animation(.bouncy, value: isPlaying)
-                    .opacity(isHost ? 1.0 : 0.6)
+                    .animation(.smooth, value: isBuffering)
+                    .opacity(isHost ? 1.0 : 0.5)
                 }
-                .disabled(!isHost)
+                .disabled(!isHost || isBuffering)
                 
+                // Skip button
                 Button(action: {
                     if isHost {
                         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                         impactFeedback.impactOccurred()
-                       
                         onSkip()
                     }
                 }) {
                     ZStack {
                         Circle()
-                            .fill(LinearGradient(
-                                gradient: Gradient(colors: isHost ? [Color.white] : [Color.white.opacity(0.3)]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                            .frame(width: 80, height: 80)
+                            .fill(Color.appElevated)
+                            .frame(width: 56, height: 56)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.appSurface, lineWidth: 1)
-                            )
-                            .shadow(
-                                color: isHost ? Color.black.opacity(0.1) : Color.clear,
-                                radius: 8,
-                                x: 0,
-                                y: 4
+                                    .strokeBorder(Color.textMuted.opacity(0.3), lineWidth: 1)
                             )
                         
                         Image(systemName: "forward.end.fill")
                             .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(isHost ? .black : .gray)
+                            .foregroundColor(isHost ? .textPrimary : .textTertiary)
                     }
-                    .opacity(isHost ? 1.0 : 0.6)
+                    .opacity(isHost ? 1.0 : 0.5)
                 }
                 .disabled(!isHost)
             }
@@ -967,68 +1183,67 @@ struct CurrentSongDownvoteInfo: View {
         }
     }
     
+    private var statusColor: Color {
+        switch warningLevel {
+        case 2: return .error
+        case 1: return .warning
+        default: return .brandPrimary
+        }
+    }
+    
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.sm) {
             Image(systemName: warningLevel == 2 ? "exclamationmark.triangle.fill" :
-                             warningLevel == 1 ? "exclamationmark.circle.fill" : "info.circle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(warningLevel == 2 ? .red :
-                               warningLevel == 1 ? .orange : .blue)
+                             warningLevel == 1 ? "exclamationmark.circle.fill" : "hand.thumbsdown.circle.fill")
+                .font(.system(size: 18))
+                .foregroundColor(statusColor)
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
                 HStack {
-                    Text("Downvotes")
-                        .font(.caption)
+                    Text("Skip Votes")
+                        .font(.labelMedium)
                         .foregroundColor(.textPrimary)
                     
                     Spacer()
                     
                     Text("\(downvotes)/\(maxDownvotes)")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(warningLevel == 2 ? .red :
-                                       warningLevel == 1 ? .orange : .textSecondary)
+                        .font(.labelMedium)
+                        .foregroundColor(statusColor)
                 }
                 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.white.opacity(0.2))
-                            .frame(height: 4)
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color.appElevated)
+                            .frame(height: 6)
                         
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(LinearGradient(
-                                gradient: Gradient(colors: [
-                                    warningLevel == 2 ? .red :
-                                    warningLevel == 1 ? .orange : .blue,
-                                    warningLevel == 2 ? .red.opacity(0.7) :
-                                    warningLevel == 1 ? .orange.opacity(0.7) : .blue.opacity(0.7)
-                                ]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                            .frame(width: geometry.size.width * progress, height: 4)
-                            .animation(.easeInOut(duration: 0.3), value: progress)
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(
+                                LinearGradient(
+                                    colors: [statusColor, statusColor.opacity(0.7)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geometry.size.width * progress, height: 6)
+                            .animation(.smooth, value: progress)
                     }
                 }
-                .frame(height: 4)
+                .frame(height: 6)
             }
             
             if hasUserDownvoted {
-                Image(systemName: "hand.thumbsdown.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.red)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.success)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
+        .padding(Spacing.md)
+        .background(Color.appCardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                .strokeBorder(statusColor.opacity(0.3), lineWidth: 1)
         )
     }
 }

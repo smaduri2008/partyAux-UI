@@ -29,166 +29,231 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
+            // Premium background
+            Color.deepNavy
+                .ignoresSafeArea()
+            
             VStack(spacing: 0) {
                 // Header with playlist info
-                VStack(spacing: 16) {
-                    // Playlist artwork
+                VStack(spacing: 20) {
+                    // Playlist artwork with premium styling
                     ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(LinearGradient(gradient: Gradient(colors: [.purple.opacity(0.6), .blue.opacity(0.6)]), startPoint: .topLeading, endPoint: .bottomTrailing))
+                        // Glow effect
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                Color.brandSecondary.opacity(0.3)
+                            )
+                            .frame(width: 130, height: 130)
+                            .blur(radius: 20)
+                            .opacity(0.5)
+                        
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                Color.appElevated
+                            )
                             .frame(width: 120, height: 120)
-                            .shadow(color: .purple.opacity(0.3), radius: 10, x: 0, y: 5)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.brandSecondary.opacity(0.3), lineWidth: 1)
+                            )
+                            .shadow(color: .brandSecondary.opacity(0.4), radius: 16, x: 0, y: 8)
 
-                        Image(systemName: "music.note.list")
-                            .font(.system(size: 48))
-                            .foregroundColor(.white)
+                        LogoView(size: 60, hasBackground: false)
                     }
 
                     // Playlist details
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         Text(playlist.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.textPrimary)
+                            .font(Font.premium(size: 24, weight: .bold))
+                            .foregroundColor(.white)
                             .multilineTextAlignment(.center)
 
-                        HStack(spacing: 16) {
-                            Text("\(playlist.songs.count) songs")
-                                .font(.subheadline)
-                                .foregroundColor(.textSecondary)
-
-                            HStack(spacing: 4) {
-                                Image(systemName: playlist.isPublic ? "globe" : "lock.fill")
+                        HStack(spacing: 20) {
+                            // Song count
+                            HStack(spacing: 6) {
+                                Image(systemName: "music.note")
                                     .font(.system(size: 12))
-                                    .foregroundColor(playlist.isPublic ? .green : .gray)
-
-                                Text(playlist.isPublic ? "Public" : "Private")
-                                    .font(.subheadline)
-                                    .foregroundColor(.textSecondary)
+                                    .foregroundColor(.electricCyan)
+                                Text("\(playlist.songs.count) songs")
+                                    .font(Font.premium(size: 13))
+                                    .foregroundColor(.white.opacity(0.6))
                             }
 
+                            // Visibility badge
+                            HStack(spacing: 4) {
+                                Image(systemName: playlist.isPublic ? "globe" : "lock.fill")
+                                    .font(.system(size: 11))
+                                Text(playlist.isPublic ? "Public" : "Private")
+                                    .font(Font.premium(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(playlist.isPublic ? .green : .white.opacity(0.5))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(playlist.isPublic ? Color.green.opacity(0.15) : Color.white.opacity(0.08))
+                            )
+
+                            // Owner badge
                             if !isOwner {
                                 HStack(spacing: 4) {
                                     Image(systemName: "person.fill")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.blue)
-
+                                        .font(.system(size: 11))
                                     Text("by \(playlist.owner)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.textSecondary)
+                                        .font(Font.premium(size: 11))
                                 }
+                                .foregroundColor(.coralPink)
                             }
                         }
                         
                         // Room status indicator
                         if isInRoom {
-                            HStack(spacing: 4) {
+                            HStack(spacing: 6) {
                                 Image(systemName: "music.note.house.fill")
                                     .font(.system(size: 12))
-                                    .foregroundColor(.green)
-
                                 Text("Connected to room \(roomManager.roomCode)")
-                                    .font(.caption)
-                                    .foregroundColor(.green)
+                                    .font(Font.premium(size: 12, weight: .medium))
                             }
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(Color.green.opacity(0.15))
+                            )
                             .padding(.top, 4)
                         }
                     }
 
                     // Action buttons
                     if isOwner {
-                        HStack(spacing: 16) {
+                        HStack(spacing: 12) {
                             Button(action: {
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.impactOccurred()
                                 showingVisibilityAlert = true
                             }) {
                                 HStack(spacing: 8) {
                                     Image(systemName: playlist.isPublic ? "lock.fill" : "globe")
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 13))
                                     Text(playlist.isPublic ? "Make Private" : "Make Public")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                                        .font(Font.premium(size: 13, weight: .semibold))
                                 }
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.blue)
-                                .cornerRadius(8)
+                                .padding(.vertical, 10)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.electricCyan.opacity(0.2))
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(Color.electricCyan.opacity(0.5), lineWidth: 1)
+                                        )
+                                )
                             }
 
                             Button(action: {
-                                editMode = editMode == .active ? .inactive : .active
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.impactOccurred()
+                                withAnimation(.springy) {
+                                    editMode = editMode == .active ? .inactive : .active
+                                }
                             }) {
                                 HStack(spacing: 8) {
                                     Image(systemName: editMode == .active ? "checkmark" : "pencil")
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 13))
                                     Text(editMode == .active ? "Done" : "Edit")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                                        .font(Font.premium(size: 13, weight: .semibold))
                                 }
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.purple)
-                                .cornerRadius(8)
+                                .padding(.vertical, 10)
+                                .background(
+                                    Capsule()
+                                        .fill(editMode == .active ? Color.green.opacity(0.3) : Color.softPurple.opacity(0.3))
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(editMode == .active ? Color.green.opacity(0.5) : Color.softPurple.opacity(0.5), lineWidth: 1)
+                                        )
+                                )
                             }
                         }
                     }
                 }
-                .padding()
-                .background(Color.black)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
 
-                Divider()
-                    .background(Color.gray.opacity(0.3))
+                // Divider
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [.clear, .electricCyan.opacity(0.3), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: 1)
 
                 // Songs list
                 if playlist.songs.isEmpty {
                     Spacer()
-                    VStack(spacing: 20) {
-                        Image(systemName: "music.note")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
+                    VStack(spacing: 24) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.05))
+                                .frame(width: 100, height: 100)
+                            
+                            Image(systemName: "music.note")
+                                .font(.system(size: 40))
+                                .foregroundColor(.white.opacity(0.3))
+                        }
 
                         VStack(spacing: 8) {
                             Text("No Songs Yet")
-                                .font(.headline)
-                                .foregroundColor(.textPrimary)
+                                .font(Font.premium(size: 20, weight: .bold))
+                                .foregroundColor(.white)
 
                             Text("Add songs to this playlist from the search tab")
-                                .font(.subheadline)
-                                .foregroundColor(.textSecondary)
+                                .font(Font.premium(size: 14))
+                                .foregroundColor(.white.opacity(0.5))
                                 .multilineTextAlignment(.center)
                         }
                     }
                     Spacer()
                 } else {
-                    List {
-                        ForEach(playlist.songs.indices, id: \.self) { index in
-                            let song = playlist.songs[index]
-                            PlaylistSongRowView(
-                                song: song,
-                                index: index,
-                                canEdit: isOwner && editMode == .active,
-                                isInRoom: isInRoom,
-                                animatedIndex: $animatedIndex,
-                                onDelete: {
-                                    songToDelete = song
-                                    showingDeleteAlert = true
-                                },
-                                onAddToQueue: {
-                                    addSongToQueue(song: song, index: index)
-                                }
-                            )
-                            .listRowBackground(Color.black)
-                            .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(playlist.songs.indices, id: \.self) { index in
+                                let song = playlist.songs[index]
+                                PlaylistSongRowView(
+                                    song: song,
+                                    index: index,
+                                    canEdit: isOwner && editMode == .active,
+                                    isInRoom: isInRoom,
+                                    animatedIndex: $animatedIndex,
+                                    onDelete: {
+                                        songToDelete = song
+                                        showingDeleteAlert = true
+                                    },
+                                    onAddToQueue: {
+                                        addSongToQueue(song: song, index: index)
+                                    }
+                                )
+                                .scaleEffect(animatedIndex == index ? 0.95 : 1.0)
+                            }
+                            .onMove(perform: isOwner && editMode == .active ? moveSongs : nil)
                         }
-                        .onMove(perform: isOwner && editMode == .active ? moveSongs : nil)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 16)
+                        .padding(.bottom, 100)
                     }
-                    .listStyle(PlainListStyle())
                     .environment(\.editMode, $editMode)
                 }
             }
-            .background(Color.black.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.deepNavy, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .alert("Delete Song", isPresented: $showingDeleteAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
@@ -211,18 +276,40 @@ struct PlaylistDetailView: View {
             // Floating "plus" button in bottom trailing corner
             if isOwner {
                 Button(action: {
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
                     showingAddSongsSheet = true
                 }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 65, height: 65)
-                        .background(Color.purple)
-                        .clipShape(Circle())
-                        .shadow(color: .purple.opacity(0.4), radius: 12, x: 0, y: 6)
-                        .padding(.trailing, 28)
-                        .padding(.bottom, 28)
+                    ZStack {
+                        // Glow effect
+                        Circle()
+                            .fill(Color.electricCyan)
+                            .frame(width: 60, height: 60)
+                            .blur(radius: 15)
+                            .opacity(0.5)
+                        
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.electricCyan, .softPurple],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 60, height: 60)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                            .shadow(color: .electricCyan.opacity(0.5), radius: 12, x: 0, y: 6)
+                        
+                        Image(systemName: "plus")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.white)
+                    }
                 }
+                .padding(.trailing, 24)
+                .padding(.bottom, 24)
                 .sheet(isPresented: $showingAddSongsSheet) {
                     PlaylistAddSongView(playlistManager: playlistManager, playlist: playlist)
                         .onDisappear {
@@ -428,28 +515,42 @@ struct PlaylistSongRowView: View {
     @State private var isPressed = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Always try to display the thumbnail if available
+        HStack(alignment: .center, spacing: 14) {
+            // Thumbnail with premium styling
             if let imageUrl = URL(string: song.thumbnail), !song.thumbnail.isEmpty {
                 AsyncImage(url: imageUrl) { image in
                     image
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    ProgressView()
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.white.opacity(0.1))
+                        .overlay(
+                            ProgressView()
+                                .tint(.electricCyan)
+                        )
                 }
-                .frame(width: 50, height: 50)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .shadow(radius: 2)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
             } else {
-                // If no thumbnail, show the number as fallback
+                // Fallback with index number
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 50, height: 50)
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(
+                            LinearGradient(
+                                colors: [.softPurple.opacity(0.3), .electricCyan.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 52, height: 52)
+                    
                     Text("\(index + 1)")
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                        .font(Font.premium(size: 16, weight: .bold))
                         .foregroundColor(.white)
                 }
             }
@@ -457,20 +558,22 @@ struct PlaylistSongRowView: View {
             // Song info
             VStack(alignment: .leading, spacing: 4) {
                 Text(song.title)
-                    .font(.headline)
-                    .foregroundColor(.textPrimary)
+                    .font(Font.premium(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
                     Text(song.artist)
-                        .font(.subheadline)
-                        .foregroundColor(.textSecondary)
+                        .font(Font.premium(size: 13))
+                        .foregroundColor(.white.opacity(0.5))
                         .lineLimit(1)
 
                     if !song.duration.isEmpty {
-                        Text("• \(formatDuration(song.duration))")
-                            .font(.subheadline)
-                            .foregroundColor(.textSecondary)
+                        Text("•")
+                            .foregroundColor(.white.opacity(0.3))
+                            Text(formatDuration(song.duration))
+                            .font(Font.premium(size: 12))
+                            .foregroundColor(.white.opacity(0.4))
                     }
                 }
             }
@@ -478,34 +581,64 @@ struct PlaylistSongRowView: View {
             Spacer()
 
             // Actions
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 // Add to Queue button (only show if in room and not in edit mode)
                 if isInRoom && !canEdit {
-                    Button(action: onAddToQueue) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.green)
+                    Button(action: {
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
+                        onAddToQueue()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.green.opacity(0.15))
+                                .frame(width: 36, height: 36)
+                            
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.green)
+                        }
                     }
                     .buttonStyle(BorderlessButtonStyle())
                 }
                 
                 // Delete button (only show if can edit)
                 if canEdit {
-                    Button(action: onDelete) {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.red)
+                    Button(action: {
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+                        onDelete()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red.opacity(0.15))
+                                .frame(width: 36, height: 36)
+                            
+                            Image(systemName: "minus")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.red)
+                        }
                     }
                     .buttonStyle(BorderlessButtonStyle())
                 }
             }
         }
-        .padding(.vertical, 4)
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .contentShape(Rectangle()) // Make entire row tappable
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .contentShape(Rectangle())
         .onTapGesture {
             // Only allow tapping to add to queue if in room and not in edit mode
             if isInRoom && !canEdit {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
                 onAddToQueue()
             }
         }

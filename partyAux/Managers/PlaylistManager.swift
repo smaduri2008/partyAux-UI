@@ -7,8 +7,13 @@ class PlaylistManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let baseURL = "http://api.partyaux.party"
+    private let baseURL = "https://api.partyaux.party"
     var userData: UserAuth
+    
+    /// Safe JWT accessor - returns empty string if not available
+    private var jwt: String {
+        userData.jwt ?? ""
+    }
     
     var userEmail: String {
         return userData.email
@@ -31,7 +36,7 @@ class PlaylistManager: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestBody: [String: Any] = [
-            "jwt": userData.jwt,
+            "jwt": jwt,
             "name": name
         ]
         
@@ -84,7 +89,7 @@ class PlaylistManager: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestBody: [String: Any] = [
-            "jwt": userData.jwt,
+            "jwt": jwt,
             "playlist_id": playlistId
         ]
         
@@ -141,7 +146,7 @@ class PlaylistManager: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestBody: [String: Any] = [
-            "jwt": userData.jwt
+            "jwt": jwt
         ]
         
         guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
@@ -239,7 +244,7 @@ class PlaylistManager: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestBody: [String: Any] = [
-            "jwt": userData.jwt,
+            "jwt": jwt,
             "playlist_id": playlistId
         ]
         
@@ -336,7 +341,7 @@ class PlaylistManager: ObservableObject {
         let songsArray = songs.map { $0.toDict() }
         
         let requestBody: [String: Any] = [
-            "jwt": userData.jwt,
+            "jwt": jwt,
             "playlist_id": playlistId,
             "songs": songsArray
         ]
@@ -410,7 +415,7 @@ class PlaylistManager: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestBody: [String: Any] = [
-            "jwt": userData.jwt,
+            "jwt": jwt,
             "playlist_id": playlistId,
             "public": isPublic
         ]

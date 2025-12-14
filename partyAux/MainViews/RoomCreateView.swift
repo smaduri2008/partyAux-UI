@@ -11,247 +11,277 @@ struct RoomCreateJoinView: View {
     @State private var isCreatingRoom = false
     @State private var isJoiningRoom = false
     @State private var showCreatedRoom = false
+    @State private var animateGlow = false
 
     var body: some View {
+        GeometryReader { geometry in
         ZStack {
-            LinearGradient.backgroundGradient
+            Color.appBackground
                 .ignoresSafeArea()
+            
+            // Animated background glow
+            Circle()
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            .brandPrimary.opacity(0.2),
+                            .brandSecondary.opacity(0.1),
+                            .clear
+                        ]),
+                        center: .center,
+                        startRadius: 50,
+                        endRadius: 350
+                    )
+                )
+                .frame(width: min(geometry.size.width * 1.5, 600), height: min(geometry.size.width * 1.5, 600))
+                .offset(y: -150)
+                .scaleEffect(animateGlow ? 1.2 : 1.0)
+                .opacity(animateGlow ? 0.7 : 0.5)
+                .animation(
+                    Animation.easeInOut(duration: 4).repeatForever(autoreverses: true),
+                    value: animateGlow
+                )
 
-            ScrollView {
-                VStack(spacing: 30) {
-                    Spacer(minLength: 40)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: Spacing.lg) {
+                    Spacer(minLength: max(geometry.size.height * 0.05, 30))
                     
                     // Header Section
-                    VStack(spacing: 16) {
+                    VStack(spacing: Spacing.sm) {
+                        LogoView(size: min(geometry.size.width * 0.22, 88), hasBackground: false)
+                        
                         Text("Music Rooms")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
+                            .font(.headlineMedium)
                             .foregroundColor(.textPrimary)
                         
-                        Text("Create a room or join an existing one to start sharing music")
-                            .font(.callout)
+                        Text("Create or join a room to share music with friends")
+                            .font(.bodySmall)
                             .foregroundColor(.textSecondary)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, Spacing.lg)
                     }
-                    .animation(.smooth.delay(0.2), value: true)
                     
-                    // Create Room Section
-                    VStack(spacing: 24) {
-                        HStack(spacing: 16) {
+                    // Create Room Card
+                    VStack(spacing: Spacing.lg) {
+                        HStack(spacing: Spacing.md) {
                             ZStack {
                                 Circle()
-                                    .fill(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing))
-                                    .frame(width: 45, height: 45)
-                                    .shadow(color: Color.white.opacity(0.3), radius: 10, x: 0, y: 5)
+                                    .fill(LinearGradient.brandGradient)
+                                    .frame(width: 48, height: 48)
+                                    .shadow(color: .brandPrimary.opacity(0.4), radius: 10, x: 0, y: 5)
                                 
                                 Image(systemName: "plus")
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(.black)
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundColor(.white)
                             }
                             
-                            Text("Create New Room")
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.textPrimary)
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text("Create New Room")
+                                    .font(.titleMedium)
+                                    .foregroundColor(.textPrimary)
+                                Text("Start a new listening session")
+                                    .font(.labelMedium)
+                                    .foregroundColor(.textSecondary)
+                            }
+                            
+                            Spacer()
                         }
                         
                         Button(action: {
                             createRoom()
                         }) {
-                            HStack {
+                            HStack(spacing: Spacing.sm) {
                                 if isCreatingRoom {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
-                                    Text("Creating Room...")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
+                                    Text("Creating...")
+                                        .font(.titleSmall)
                                 } else {
                                     Image(systemName: "sparkles")
                                         .font(.system(size: 16, weight: .medium))
                                     Text("Create Room")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
+                                        .font(.titleSmall)
                                 }
                             }
+                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, Spacing.md)
                             .background(
-                                isCreatingRoom ?
-                                LinearGradient(gradient: Gradient(colors: [Color.white.opacity(0.7)]), startPoint: .leading, endPoint: .trailing) :
-                                LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing)
+                                isCreatingRoom
+                                    ? LinearGradient(colors: [.brandPrimary.opacity(0.7)], startPoint: .leading, endPoint: .trailing)
+                                    : LinearGradient.brandGradient
                             )
-                            .foregroundColor(.black)
-                            .cornerRadius(16)
-                            .shadow(color: Color.white.opacity(0.4), radius: 12, x: 0, y: 6)
-                            .scaleEffect(isCreatingRoom ? 0.98 : 1.0)
-                            .animation(.bouncy, value: isCreatingRoom)
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+                            .shadow(color: .brandPrimary.opacity(0.4), radius: 12, x: 0, y: 6)
                         }
                         .disabled(isCreatingRoom || isJoiningRoom)
+                        .scaleEffect(isCreatingRoom ? 0.98 : 1.0)
+                        .animation(.snappy, value: isCreatingRoom)
                         
                         // Show created room code
                         if showCreatedRoom && !roomManager.roomCode.isEmpty {
-                            VStack(spacing: 12) {
-                                Text("Room Created!")
-                                    .font(.headline)
-                                    .foregroundColor(.green)
+                            HStack(spacing: Spacing.sm) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.success)
+                                    .font(.system(size: 20))
                                 
-                                Text("Room Code: \(roomManager.roomCode)")
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 12)
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(12)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Room Created!")
+                                        .font(.labelMedium)
+                                        .foregroundColor(.success)
+                                    Text("Code: \(roomManager.roomCode)")
+                                        .font(.titleSmall)
+                                        .foregroundColor(.textPrimary)
+                                }
+                                
+                                Spacer()
                             }
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                            .animation(.springy, value: showCreatedRoom)
+                            .padding(Spacing.md)
+                            .background(Color.success.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                                    .strokeBorder(Color.success.opacity(0.3), lineWidth: 1)
+                            )
+                            .transition(.scale.combined(with: .opacity))
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .animation(.smooth.delay(0.4), value: true)
+                    .padding(Spacing.lg)
+                    .background(Color.appCardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.large, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CornerRadius.large, style: .continuous)
+                            .strokeBorder(Color.textMuted.opacity(0.1), lineWidth: 1)
+                    )
+                    .padding(.horizontal, Spacing.lg)
                     
                     // Divider
-                    HStack {
+                    HStack(spacing: Spacing.md) {
                         Rectangle()
-                            .fill(LinearGradient(
-                                gradient: Gradient(colors: [Color.clear, Color.white.opacity(0.3), Color.clear]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
+                            .fill(Color.textMuted.opacity(0.2))
                             .frame(height: 1)
                         
                         Text("OR")
-                            .font(.caption)
-                            .fontWeight(.medium)
+                            .font(.labelMedium)
                             .foregroundColor(.textTertiary)
-                            .padding(.horizontal, 16)
                         
                         Rectangle()
-                            .fill(LinearGradient(
-                                gradient: Gradient(colors: [Color.clear, Color.white.opacity(0.3), Color.clear]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
+                            .fill(Color.textMuted.opacity(0.2))
                             .frame(height: 1)
                     }
-                    .padding(.horizontal, 24)
-                    .animation(.smooth.delay(0.5), value: true)
+                    .padding(.horizontal, Spacing.xl)
                     
-                    // Join Room Section
-                    VStack(spacing: 24) {
-                        HStack(spacing: 16) {
+                    // Join Room Card
+                    VStack(spacing: Spacing.lg) {
+                        HStack(spacing: Spacing.md) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.appCardBackground)
+                                    .fill(Color.appElevated)
                                     .overlay(
                                         Circle()
-                                            .stroke(LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing), lineWidth: 2)
+                                            .strokeBorder(LinearGradient.brandGradient, lineWidth: 2)
                                     )
-                                    .frame(width: 45, height: 45)
+                                    .frame(width: 48, height: 48)
                                 
                                 Image(systemName: "door.right.hand.open")
-                                    .font(.system(size: 24, weight: .medium))
-                                    .foregroundColor(.white)
+                                    .font(.system(size: 22, weight: .medium))
+                                    .foregroundStyle(LinearGradient.brandGradient)
                             }
                             
-                            Text("Join Existing Room")
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.textPrimary)
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text("Join Existing Room")
+                                    .font(.titleMedium)
+                                    .foregroundColor(.textPrimary)
+                                Text("Enter a 6-character room code")
+                                    .font(.labelMedium)
+                                    .foregroundColor(.textSecondary)
+                            }
+                            
+                            Spacer()
                         }
                         
-                        VStack(spacing: 16) {
-                            Text("Enter Room Code")
-                                .font(.callout)
-                                .foregroundColor(.textSecondary)
+                        // Room code input
+                        ZStack {
+                            TextField("", text: $joinCode)
+                                .keyboardType(.asciiCapable)
+                                .textContentType(.oneTimeCode)
+                                .foregroundColor(.clear)
+                                .accentColor(.clear)
+                                .frame(width: 0, height: 0)
+                                .focused($isJoinCodeFocused)
+                                .onChange(of: joinCode) { newValue in
+                                    handleJoinCodeChange(newValue)
+                                }
 
-                            ZStack {
-                                TextField("", text: $joinCode)
-                                    .keyboardType(.numberPad)
-                                    .textContentType(.oneTimeCode)
-                                    .foregroundColor(.clear)
-                                    .accentColor(.clear)
-                                    .frame(width: 0, height: 0)
-                                    .focused($isJoinCodeFocused)
-                                    .onChange(of: joinCode) { newValue in
-                                        handleJoinCodeChange(newValue)
-                                    }
-
-                                HStack(spacing: 12) {
-                                    ForEach(0..<joinCodeLength, id: \.self) { index in
-                                        RoomCodeDigitView(
-                                            character: joinCode[safe: index].map { String($0) } ?? "",
-                                            isActive: index == joinCode.count,
-                                            isFilled: index < joinCode.count,
-                                            bounce: bounceIndices[index]
-                                        )
-                                    }
+                            HStack(spacing: Spacing.sm) {
+                                ForEach(0..<joinCodeLength, id: \.self) { index in
+                                    RoomCodeDigitView(
+                                        character: joinCode[safe: index].map { String($0) } ?? "",
+                                        isActive: index == joinCode.count,
+                                        isFilled: index < joinCode.count,
+                                        bounce: bounceIndices[index]
+                                    )
                                 }
                             }
-                            .onTapGesture {
-                                isJoinCodeFocused = true
-                            }
-
-                            Button(action: {
-                                joinRoom()
-                            }) {
-                                HStack {
-                                    if isJoiningRoom {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(0.8)
-                                        Text("Joining Room...")
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                    } else {
-                                        Image(systemName: "arrow.right.circle.fill")
-                                            .font(.system(size: 16, weight: .medium))
-                                        Text("Join Room")
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    Group {
-                                        if joinCode.count == joinCodeLength && !isJoiningRoom {
-                                            LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing)
-                                        } else {
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [Color.gray.opacity(0.3)]),
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
-                                        }
-                                    }
-                                )
-                                .foregroundColor(joinCode.count == joinCodeLength && !isJoiningRoom ? .black : .textTertiary)
-                                .cornerRadius(16)
-                                .shadow(
-                                    color: joinCode.count == joinCodeLength ? Color.white.opacity(0.3) : Color.clear,
-                                    radius: 8,
-                                    x: 0,
-                                    y: 4
-                                )
-                                .scaleEffect(isJoiningRoom ? 0.98 : 1.0)
-                                .animation(.bouncy, value: isJoiningRoom)
-                            }
-                            .disabled(joinCode.count != joinCodeLength || isCreatingRoom || isJoiningRoom)
                         }
+                        .onTapGesture {
+                            isJoinCodeFocused = true
+                        }
+
+                        Button(action: {
+                            joinRoom()
+                        }) {
+                            HStack(spacing: Spacing.sm) {
+                                if isJoiningRoom {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                    Text("Joining...")
+                                        .font(.titleSmall)
+                                } else {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                    Text("Join Room")
+                                        .font(.titleSmall)
+                                }
+                            }
+                            .foregroundColor(joinCode.count == joinCodeLength && !isJoiningRoom ? .white : .textTertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Spacing.md)
+                            .background(
+                                joinCode.count == joinCodeLength && !isJoiningRoom
+                                    ? LinearGradient.brandGradient
+                                    : LinearGradient(colors: [.appElevated], startPoint: .leading, endPoint: .trailing)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+                            .shadow(
+                                color: joinCode.count == joinCodeLength ? .brandPrimary.opacity(0.4) : .clear,
+                                radius: 12,
+                                x: 0,
+                                y: 6
+                            )
+                        }
+                        .disabled(joinCode.count != joinCodeLength || isCreatingRoom || isJoiningRoom)
+                        .scaleEffect(isJoiningRoom ? 0.98 : 1.0)
+                        .animation(.snappy, value: isJoiningRoom)
                     }
-                    .padding(.horizontal, 24)
-                    .animation(.smooth.delay(0.6), value: true)
+                    .padding(Spacing.lg)
+                    .background(Color.appCardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: CornerRadius.large, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CornerRadius.large, style: .continuous)
+                            .strokeBorder(Color.textMuted.opacity(0.1), lineWidth: 1)
+                    )
+                    .padding(.horizontal, Spacing.lg)
                     
-                    Spacer(minLength: 40)
+                    Spacer(minLength: max(geometry.size.height * 0.05, 30))
                 }
-                .padding()
+                .padding(.vertical, Spacing.sm)
             }
         }
-        .background(Color.black.ignoresSafeArea())
+        }
+        .onAppear { animateGlow = true }
         .onTapGesture {
             isJoinCodeFocused = false
         }
@@ -265,7 +295,6 @@ struct RoomCreateJoinView: View {
                     isCreatingRoom = false
                 }
                 
-                // Add success haptic feedback
                 let notificationFeedback = UINotificationFeedbackGenerator()
                 notificationFeedback.notificationOccurred(.success)
             }
@@ -274,7 +303,6 @@ struct RoomCreateJoinView: View {
             if joined {
                 isJoiningRoom = false
                 
-                // Add success haptic feedback
                 let notificationFeedback = UINotificationFeedbackGenerator()
                 notificationFeedback.notificationOccurred(.success)
             }
@@ -284,7 +312,6 @@ struct RoomCreateJoinView: View {
     private func createRoom() {
         isCreatingRoom = true
         
-        // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
@@ -297,7 +324,6 @@ struct RoomCreateJoinView: View {
         isJoiningRoom = true
         isJoinCodeFocused = false
         
-        // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
@@ -310,14 +336,12 @@ struct RoomCreateJoinView: View {
         if filteredValue != joinCode {
             joinCode = filteredValue
             
-            // Animate bounce effect for new characters
             if filteredValue.count > 0 && filteredValue.count <= joinCodeLength {
                 let lastIndex = filteredValue.count - 1
                 withAnimation(.bouncy) {
                     bounceIndices[lastIndex] = true
                 }
                 
-                // Reset bounce after animation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     bounceIndices[lastIndex] = false
                 }
@@ -334,38 +358,30 @@ struct RoomCodeDigitView: View {
     
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    isFilled ? Color.white.opacity(0.1) : Color.appCardBackground
-                )
+            RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                .fill(isFilled ? Color.brandPrimary.opacity(0.1) : Color.appElevated)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(
-                            isActive ? LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing) :
-                            LinearGradient(
-                                gradient: Gradient(colors: [isFilled ? Color.white : Color.appSurface]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
+                    RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                        .strokeBorder(
+                            isActive ? LinearGradient.brandGradient :
+                            isFilled ? LinearGradient(colors: [.brandPrimary.opacity(0.5)], startPoint: .leading, endPoint: .trailing) :
+                            LinearGradient(colors: [.textMuted.opacity(0.3)], startPoint: .leading, endPoint: .trailing),
                             lineWidth: isActive ? 2 : 1
                         )
                 )
-                .frame(width: 45, height: 55)
+                .frame(width: 48, height: 58)
                 .scaleEffect(bounce ? 1.1 : 1.0)
                 .animation(.bouncy, value: bounce)
             
             Text(character)
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundColor(isFilled ? .white : .textSecondary)
+                .font(.headlineSmall)
+                .foregroundColor(isFilled ? .brandPrimary : .textSecondary)
             
-            // Cursor animation
             if isActive && character.isEmpty {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.white)
-                    .frame(width: 2, height: 20)
+                    .fill(LinearGradient.brandGradient)
+                    .frame(width: 2, height: 24)
                     .opacity(0.8)
-                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: true)
             }
         }
     }
@@ -377,9 +393,3 @@ extension String {
         return self[self.index(startIndex, offsetBy: index)]
     }
 }
-
-/*
- #Preview {
- RoomCreateJoinView()
- }
- */

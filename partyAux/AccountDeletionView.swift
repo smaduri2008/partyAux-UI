@@ -14,74 +14,105 @@ struct AccountDeletionView: View {
     
     var body: some View {
         ZStack {
-            // Dark background to match OTP view
-            Color.black
+            // Premium dark background
+            Color.deepNavy
                 .ignoresSafeArea()
             
-            VStack(spacing: 24) {
+            // Subtle gradient orbs
+            Circle()
+                .fill(Color.red.opacity(0.1))
+                .frame(width: 200, height: 200)
+                .blur(radius: 60)
+                .offset(x: -100, y: -200)
+            
+            Circle()
+                .fill(Color.coralPink.opacity(0.1))
+                .frame(width: 150, height: 150)
+                .blur(radius: 50)
+                .offset(x: 120, y: 300)
+            
+            VStack(spacing: 28) {
                 // Warning icon and text
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.red)
+                VStack(spacing: 20) {
+                    ZStack {
+                        // Glow effect
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 90, height: 90)
+                            .blur(radius: 25)
+                            .opacity(0.3)
+                        
+                        Circle()
+                            .fill(Color.red.opacity(0.15))
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 2)
+                            )
+                        
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 36))
+                            .foregroundColor(.red)
+                    }
                     
                     Text("Delete Account")
-                        .font(.title)
-                        .fontWeight(.bold)
+                        .font(Font.premium(size: 28, weight: .bold))
                         .foregroundColor(.red)
                     
                     Text("This action is permanent and cannot be undone. All your data, playlists, and account information will be permanently deleted.")
-                        .font(.body)
+                        .font(Font.premium(size: 14))
                         .multilineTextAlignment(.center)
-                        .foregroundColor(.gray)
-                        .padding(.horizontal)
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(.horizontal, 24)
                 }
                 
                 if !otpSent {
                     // Initial warning and send OTP button
-                    VStack(spacing: 16) {
-                        Text("To proceed, we'll send a verification code to your email address: \(userAuth.email)")
-                            .font(.caption)
+                    VStack(spacing: 20) {
+                            Text("To proceed, we'll send a verification code to your email address: \(userAuth.email)")
+                            .font(Font.premium(size: 12))
                             .multilineTextAlignment(.center)
-                            .foregroundColor(.gray)
-                            .padding(.horizontal)
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding(.horizontal, 24)
                         
                         Button(action: sendDeletionOTP) {
-                            HStack {
+                            HStack(spacing: 10) {
                                 if isLoading {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 } else {
                                     Image(systemName: "envelope.fill")
+                                        .font(.system(size: 14))
                                 }
                                 Text(isLoading ? "Sending..." : "Send Verification Code")
+                                        .font(Font.premium(size: 16, weight: .semibold))
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
                             .background(
                                 LinearGradient(
-                                    gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
+                                    colors: [.red, .coralPink],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
                             )
-                            .cornerRadius(16)
-                            .shadow(color: Color.red.opacity(0.3), radius: 12, x: 0, y: 6)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .shadow(color: Color.red.opacity(0.4), radius: 12, x: 0, y: 6)
                         }
                         .disabled(isLoading)
-                        .padding(.horizontal)
+                        .padding(.horizontal, 24)
                     }
                 } else {
                     // OTP input and delete button
-                    VStack(spacing: 32) {
-                        Text("Enter the verification code sent to your email:")
-                            .font(.headline)
+                    VStack(spacing: 28) {
+                            Text("Enter the verification code sent to your email:")
+                                .font(Font.premium(size: 15, weight: .medium))
                             .multilineTextAlignment(.center)
                             .foregroundColor(.white)
                         
-                        // OTP Input Section (same as OTP view)
+                        // OTP Input Section
                         ZStack {
                             // Hidden TextField for input
                             TextField("", text: $otpCode)
@@ -95,10 +126,10 @@ struct AccountDeletionView: View {
                                     handleOTPChange(newValue)
                                 }
                             
-                            // Visual OTP boxes
-                            HStack(spacing: 16) {
+                            // Visual OTP boxes with premium styling
+                            HStack(spacing: 12) {
                                 ForEach(0..<otpLength, id: \.self) { index in
-                                    OTPDigitView(
+                                    DeletionOTPDigitView(
                                         digit: otpCode.digits[safe: index] ?? "",
                                         isActive: index == otpCode.count,
                                         isFilled: index < otpCode.count,
@@ -113,41 +144,51 @@ struct AccountDeletionView: View {
                         .padding(.horizontal, 24)
                         
                         Button(action: {
+                            let generator = UIImpactFeedbackGenerator(style: .heavy)
+                            generator.impactOccurred()
                             showingConfirmation = true
                         }) {
-                            HStack {
+                            HStack(spacing: 10) {
                                 if isLoading {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 } else {
                                     Image(systemName: "trash.fill")
+                                        .font(.system(size: 14))
                                 }
                                 Text(isLoading ? "Deleting..." : "Delete Account Permanently")
+                                            .font(Font.premium(size: 16, weight: .semibold))
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
                             .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        otpCode.count == otpLength && !isLoading ? Color.red : Color.gray.opacity(0.5),
-                                        otpCode.count == otpLength && !isLoading ? Color.red.opacity(0.8) : Color.gray.opacity(0.5)
-                                    ]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
+                                Group {
+                                    if otpCode.count == otpLength && !isLoading {
+                                        LinearGradient(colors: [.red, .coralPink], startPoint: .leading, endPoint: .trailing)
+                                    } else {
+                                        Color.white.opacity(0.1)
+                                    }
+                                }
                             )
-                            .cornerRadius(16)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(
+                                        otpCode.count == otpLength && !isLoading ? Color.clear : Color.white.opacity(0.1),
+                                        lineWidth: 1
+                                    )
+                            )
                             .shadow(
-                                color: otpCode.count == otpLength ? Color.red.opacity(0.3) : Color.clear,
+                                color: otpCode.count == otpLength ? Color.red.opacity(0.4) : Color.clear,
                                 radius: 12,
                                 x: 0,
                                 y: 6
                             )
                         }
                         .disabled(otpCode.count != otpLength || isLoading)
-                        .padding(.horizontal)
+                        .padding(.horizontal, 24)
                         
                         Button("Resend Code") {
                             sendDeletionOTP()
@@ -225,7 +266,7 @@ struct AccountDeletionView: View {
         isLoading = true
         errorMessage = ""
         
-        guard let url = URL(string: "\(userAuth.url)/send-account-deletion-otp") else {
+        guard let url = URL(string: "\(NetworkManager.shared.baseURL)/send-account-deletion-otp") else {
             errorMessage = "Invalid URL"
             isLoading = false
             return
@@ -287,7 +328,7 @@ struct AccountDeletionView: View {
         isLoading = true
         errorMessage = ""
         
-        guard let url = URL(string: "\(userAuth.url)/delete-account") else {
+        guard let url = URL(string: "\(NetworkManager.shared.baseURL)/delete-account") else {
             errorMessage = "Invalid URL"
             isLoading = false
             return
@@ -348,9 +389,8 @@ struct AccountDeletionView: View {
     }
 }
 
-/*
-// Reuse the same OTPDigitView from the OTP view
-struct OTPDigitView: View {
+// MARK: - Deletion OTP Digit View
+struct DeletionOTPDigitView: View {
     let digit: String
     let isActive: Bool
     let isFilled: Bool
@@ -366,13 +406,13 @@ struct OTPDigitView: View {
                         .stroke(
                             isActive ?
                             LinearGradient(
-                                gradient: Gradient(colors: [Color.purple, Color.blue]),
+                                gradient: Gradient(colors: [Color.red, Color.coralPink]),
                                 startPoint: .leading,
                                 endPoint: .trailing
                             ) :
                             LinearGradient(
                                 gradient: Gradient(colors: [
-                                    isFilled ? Color.purple.opacity(0.5) : Color.gray.opacity(0.3)
+                                    isFilled ? Color.red.opacity(0.5) : Color.gray.opacity(0.3)
                                 ]),
                                 startPoint: .leading,
                                 endPoint: .trailing
@@ -394,31 +434,20 @@ struct OTPDigitView: View {
                 RoundedRectangle(cornerRadius: 1)
                     .fill(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.purple, Color.blue]),
+                            gradient: Gradient(colors: [Color.red, Color.coralPink]),
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
                     .frame(width: 2, height: 24)
                     .opacity(0.8)
-                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: UUID())
             }
         }
     }
 }
 
-// Extension to safely access string characters by index
-extension String {
-    var digits: [String] {
-        return self.map { String($0) }
-    }
-}
-
-extension Array {
-    subscript(safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
-    }
-}*/
+// NOTE: `digits` and `subscript(safe:)` are defined in `Helpers.swift` for global use.
+// We no longer redeclare them here to avoid duplicate-symbol compile errors.
 
 #Preview {
     AccountDeletionView()

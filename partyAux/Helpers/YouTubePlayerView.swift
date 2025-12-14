@@ -8,6 +8,9 @@ struct YouTubePlayerView: UIViewRepresentable {
     @ObservedObject var roomManager: RoomManager
     @Binding var playerReady: Bool
     @Binding var songCurrentlyPlaying: Bool
+    @Binding var currentTime: Float
+    @Binding var duration: Float
+    @Binding var isBuffering: Bool
     var onPlayerReady: (() -> Void)? = nil
     
     func makeUIView(context: Context) -> YTPlayerView {
@@ -23,6 +26,9 @@ struct YouTubePlayerView: UIViewRepresentable {
         
         if context.coordinator.currentVideoID != videoID {
             context.coordinator.currentVideoID = videoID
+            context.coordinator.parent.isBuffering = true
+            context.coordinator.parent.currentTime = 0
+            context.coordinator.parent.duration = 0
             uiView.load(withVideoId: videoID, playerVars: playerVars)
         }
     }
@@ -37,7 +43,8 @@ struct YouTubePlayerView: UIViewRepresentable {
         var shouldBePlaying: Bool = false
         var isManuallyMuted: Bool = false
         var isHostPlayingOnlyPaused: Bool = false
-        var isManuallyPausedByUser: Bool = false // NEW: Track manual user pauses
+        var isManuallyPausedByUser: Bool = false
+        private var durationFetched: Bool = false
         
         init(_ parent: YouTubePlayerView) {
             self.parent = parent
@@ -89,16 +96,45 @@ struct YouTubePlayerView: UIViewRepresentable {
         func playerViewDidBecomeReady(_ playerView: YTPlayerView) {
             print("Player is ready - autoplay should start")
             parent.playerReady = true
+            parent.isBuffering = false
             shouldBePlaying = true
-            isManuallyPausedByUser = false // Reset manual pause on new video
+            isManuallyPausedByUser = false
+            durationFetched = false
+            
+            // Fetch duration when player is ready
+            fetchDuration(playerView: playerView)
             
             updatePlayerForHostOnlyMode(
                 playerView: playerView,
                 hostPlayingOnly: parent.roomManager.hostPlayingOnly
             )
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            // Call onPlayerReady only once on initial ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 self.parent.onPlayerReady?()
+            }
+        }
+        
+        private func fetchDuration(playerView: YTPlayerView) {
+            playerView.duration { [weak self] duration, error in
+                guard let self = self, error == nil else { return }
+                DispatchQueue.main.async {
+                    self.parent.duration = Float(duration)
+                    self.durationFetched = true
+                    print("📏 Video duration: \(duration) seconds")
+                }
+            }
+        }
+        
+        // Delegate method called with current playback time
+        func playerView(_ playerView: YTPlayerView, didPlayTime playTime: Float) {
+            DispatchQueue.main.async {
+                self.parent.currentTime = playTime
+                
+                // Fetch duration if not yet fetched (backup)
+                if !self.durationFetched {
+                    self.fetchDuration(playerView: playerView)
+                }
             }
         }
         
@@ -108,13 +144,14 @@ struct YouTubePlayerView: UIViewRepresentable {
                 case .playing:
                     print("✅ Video is playing")
                     self.parent.songCurrentlyPlaying = true
+                    self.parent.isBuffering = false
                     self.shouldBePlaying = true
-                    self.isManuallyPausedByUser = false // Clear manual pause when playing starts
-                    self.parent.onPlayerReady?()
+                    self.isManuallyPausedByUser = false
                     
                 case .paused:
                     print("⏸️ Video paused")
                     self.parent.songCurrentlyPlaying = true
+                    self.parent.isBuffering = false
                     
                     // Don't auto-resume if paused due to host-only mode
                     if self.isHostPlayingOnlyPaused {
@@ -131,7 +168,7 @@ struct YouTubePlayerView: UIViewRepresentable {
                     // Auto-resume if we should be playing and wasn't manually paused
                     if self.shouldBePlaying {
                         print("🔄 Auto-resuming paused video (shouldBePlaying = true)")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                             playerView.playVideo()
                         }
                     }
@@ -139,32 +176,44 @@ struct YouTubePlayerView: UIViewRepresentable {
                 case .ended:
                     print("🏁 Video ended")
                     self.parent.songCurrentlyPlaying = false
+                    self.parent.isBuffering = false
                     self.shouldBePlaying = false
-                    self.isManuallyPausedByUser = false // Reset for next song
+                    self.isManuallyPausedByUser = false
+                    self.parent.currentTime = 0
+                    self.parent.duration = 0
                     
+                    // Store current song as last played before transitioning
                     if !self.parent.queueManager.currentSong.isEmpty {
                         self.parent.queueManager.lastPlayedSong = self.parent.queueManager.currentSong
                         print("💿 Stored last played song from video end: \(self.parent.queueManager.currentSong["title"] as? String ?? "Unknown")")
                     }
                     
+                    // Clear current song first to trigger UI update
                     self.parent.queueManager.currentSong = [:]
-                    self.parent.queueManager.nextSongWithAutoplayCheck(roomManager: self.parent.roomManager) {
-                        print("Song Skip Attempted")
+                    
+                    // Notify server and wait for response before fetching new state
+                    self.parent.queueManager.nextSong {
+                        print("✅ Server acknowledged song end, fetching updated state")
+                        // The nextSong method already calls fetchCurrentSong and fetchQueue
                     }
                     
                 case .buffering:
                     print("⏳ Video buffering")
                     self.parent.songCurrentlyPlaying = true
+                    self.parent.isBuffering = true
                     
                 case .cued:
                     print("📋 Video cued")
                     self.parent.songCurrentlyPlaying = false
+                    self.parent.isBuffering = true
                     
                 case .unstarted:
                     print("⭕ Video unstarted")
                     self.parent.songCurrentlyPlaying = false
+                    self.parent.isBuffering = true
                     self.shouldBePlaying = true
-                    self.isManuallyPausedByUser = false // Reset for new video
+                    self.isManuallyPausedByUser = false
+                    self.durationFetched = false
                     
                     if !self.parent.roomManager.hostPlayingOnly || self.parent.roomManager.isCurrentUserHost {
                         playerView.playVideo()
@@ -176,6 +225,7 @@ struct YouTubePlayerView: UIViewRepresentable {
                 default:
                     print("❓ Unknown state")
                     self.parent.songCurrentlyPlaying = false
+                    self.parent.isBuffering = false
                 }
             }
         }

@@ -8,256 +8,301 @@
 import Foundation
 import Combine
 
-class UserAuth: ObservableObject {
+// MARK: - Auth Errors
+
+enum AuthError: LocalizedError {
+    case invalidResponse
+    case networkError(String)
+    case userExists
+    case usernameExists
+    case signUpFailed(String)
+    case updateFailed
     
-    @Published var jwt: String? {
-        didSet {
-            saveJWT(jwt: jwt)
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .networkError(let message):
+            return message
+        case .userExists:
+            return "Account already exists with that email"
+        case .usernameExists:
+            return "Username is already taken"
+        case .signUpFailed(let reason):
+            return "Sign up failed: \(reason)"
+        case .updateFailed:
+            return "Failed to update username"
         }
     }
-    @Published var email: String = "" {
-        didSet {
-            saveEmail(email: email)
-        }
+}
+
+// MARK: - Sign Up Result
+
+enum SignUpResult {
+    case success
+    case userExists
+    case usernameExists
+    case failed(String)
+}
+
+// MARK: - UserAuth
+
+final class UserAuth: ObservableObject {
+    
+    // MARK: - Storage Keys
+    
+    private enum StorageKey: String, CaseIterable {
+        case jwt = "auth_token"
+        case email = "user_email"
+        case username = "user_username"
     }
+    
+    // MARK: - Published Properties
+    
+    @Published private(set) var jwt: String?
+    @Published var email: String = ""
     @Published var otp: String = ""
     @Published var username: String = "" {
-        didSet {
-            print("Username changed to: '\(username)'")
-            saveUsername(username: username)
-        }
+        didSet { save(username, for: .username) }
     }
-    @Published var needsUser: Bool = false
-    @Published var authenticated: Bool = false
+    @Published private(set) var needsUser: Bool = false
+    @Published private(set) var authenticated: Bool = false
     @Published var showOTPView: Bool = false
     
-    let url = "https://api.partyaux.party"
-    let jwtKey = "auth_token"
-    let emailKey = "user_email"
-    let usernameKey = "user_username"
+    // MARK: - Computed Properties
     
-    init() {
-        loadJWT()
-        loadEmail()
-        loadUsername()
-        // Restore authentication state if JWT is present
-        self.authenticated = (self.jwt != nil && !self.jwt!.isEmpty)
+    var isLoggedIn: Bool { authenticated && !needsUser }
+    var hasValidToken: Bool { jwt?.isEmpty == false }
+    
+    // MARK: - Private Properties
+    
+    private let storage: UserDefaults
+    private let network: NetworkManager
+    
+    #if DEBUG
+    private var isLoggingEnabled = true
+    #else
+    private var isLoggingEnabled = false
+    #endif
+    
+    // MARK: - Initialization
+    
+    init(storage: UserDefaults = .standard, network: NetworkManager = .shared) {
+        self.storage = storage
+        self.network = network
+        restoreSession()
     }
     
-    func sendOTP() {
-        print("sending otp")
-        guard let urlRequest = URL(string: url + "/send-otp") else { return }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let data = try? JSONSerialization.data(withJSONObject: ["email": email])
-        request.httpBody = data
+    // MARK: - Session Restoration
+    
+    private func restoreSession() {
+        jwt = load(.jwt)
         
-        URLSession.shared.dataTask(with: request) { _, response, _ in
-            print("sent otp | response: \(response.debugDescription)")
-        }.resume()
+        // Avoid triggering didSet during init by setting backing values
+        let storedEmail = load(.email) ?? ""
+        let storedUsername = load(.username) ?? ""
+        
+        email = storedEmail
+        username = storedUsername
+        authenticated = hasValidToken
+        
+        log("Session restored - authenticated: \(authenticated)")
     }
     
-    func login() {
-        print("logging in")
-        guard let urlRequest = URL(string: url + "/login") else { return }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let data = try? JSONSerialization.data(withJSONObject: ["email": email, "otp": otp])
-        request.httpBody = data
+    // MARK: - Authentication Methods
+    
+    func sendOTP(completion: ((Bool) -> Void)? = nil) {
+        log("Sending OTP to: \(email)")
         
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data,
-                  let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let jwt = jsonData["jwt"] as? String else { return }
+        network.post(endpoint: "/send-otp", body: ["email": email]) { [weak self] response in
+            let success = response != nil
+            self?.log("OTP sent: \(success)")
             DispatchQueue.main.async {
-                self.jwt = jwt
-                self.authenticated = true
-                self.saveJWT(jwt: jwt)
-                self.saveEmail(email: self.email)
-                self.checkIfUserExists()
+                completion?(success)
             }
-        }.resume()
+        }
     }
     
-    func checkIfUserExists() {
-        print("checking if user exists")
-        guard let urlRequest = URL(string: url + "/exists") else { return }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let data = try? JSONSerialization.data(withJSONObject: ["jwt": jwt ?? ""])
-        request.httpBody = data
+    func login(completion: ((Bool) -> Void)? = nil) {
+        log("Attempting login")
         
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data,
-                  let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let userExists = jsonData["exists"] as? Bool else {
-                print("Failed to parse response from /exists")
+        network.post(endpoint: "/login", body: ["email": email, "otp": otp]) { [weak self] response in
+            guard let self = self,
+                  let data = response,
+                  let token = data["jwt"] as? String else {
+                DispatchQueue.main.async { completion?(false) }
                 return
             }
             
-            // Handle username separately - it might be null/nil from server
-            let serverUsername = jsonData["username"] as? String
-            
             DispatchQueue.main.async {
-                print("Server response - exists: \(userExists), username: \(serverUsername ?? "nil")")
-                
-                self.needsUser = !userExists
-                self.authenticated = userExists
-                
-                // Only update username if server provides one
-                if let serverUsername = serverUsername, !serverUsername.isEmpty {
-                    print("Setting username from server: '\(serverUsername)'")
-                    self.username = serverUsername
-                } else if userExists {
-                    // If user exists but no username from server, keep the stored one
-                    print("User exists but no username from server, keeping stored username: '\(self.username)'")
-                } else {
-                    // User doesn't exist, clear username
-                    print("User doesn't exist, clearing username")
-                    self.username = ""
+                self.setToken(token)
+                self.save(self.email, for: .email)
+                self.checkIfUserExists { _ in
+                    completion?(true)
                 }
             }
-        }.resume()
+        }
     }
     
-    func signUp() {
-        print("creating user")
-        guard let urlRequest = URL(string: url + "/create-signup") else { return }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let data = try? JSONSerialization.data(withJSONObject: ["jwt": jwt ?? "", "username": username])
-        request.httpBody = data
+    func checkIfUserExists(completion: ((Bool) -> Void)? = nil) {
+        guard let token = jwt else {
+            completion?(false)
+            return
+        }
         
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data,
-                  let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let status = jsonData["status"] as? String else {
-                print("failed")
+        log("Checking user existence")
+        
+        network.post(endpoint: "/exists", body: ["jwt": token]) { [weak self] response in
+            guard let self = self,
+                  let data = response,
+                  let exists = data["exists"] as? Bool else {
+                self?.log("Failed to parse /exists response")
+                DispatchQueue.main.async { completion?(false) }
                 return
             }
+            
+            let serverUsername = data["username"] as? String
+            
             DispatchQueue.main.async {
-                if status == "Account created successfully" {
-                    self.needsUser = false
-                    self.authenticated = true
-                    print("account created with username: '\(self.username)'")
-                } else if status == "User already exists" || status == "Username already exists" {
-                    print("username exists/account already exists with that email")
-                } else {
-                    print("could not create account \(status)")
-                }
+                self.handleUserExistsResponse(exists: exists, serverUsername: serverUsername)
+                completion?(exists)
             }
-        }.resume()
-    }
-    
-    // MARK: - Persistence
-    func saveJWT(jwt: String?) {
-        UserDefaults.standard.set(jwt, forKey: jwtKey)
-        print("Saved JWT to UserDefaults")
-    }
-    
-    func loadJWT() {
-        if let storedJWT = UserDefaults.standard.string(forKey: jwtKey) {
-            self.jwt = storedJWT
-            print("STORED JWT: \(storedJWT)")
-        } else {
-            print("No JWT found in UserDefaults")
         }
     }
     
-    func saveEmail(email: String) {
-        UserDefaults.standard.set(email, forKey: emailKey)
-        print("Saved email to UserDefaults: '\(email)'")
+    private func handleUserExistsResponse(exists: Bool, serverUsername: String?) {
+        needsUser = !exists
+        authenticated = exists
+        
+        if let name = serverUsername, !name.isEmpty {
+            username = name
+        } else if !exists {
+            username = ""
+        }
+        // If exists but no server username, keep stored username
+        
+        log("User exists: \(exists), username: \(username)")
     }
     
-    func loadEmail() {
-        if let storedEmail = UserDefaults.standard.string(forKey: emailKey) {
-            self.email = storedEmail
-            print("STORED EMAIL: \(self.email)")
-        } else {
-            print("No email found in UserDefaults")
+    // MARK: - Sign Up
+    
+    func signUp(completion: ((SignUpResult) -> Void)? = nil) {
+        guard let token = jwt else {
+            completion?(.failed("No authentication token"))
+            return
+        }
+        
+        log("Creating user account")
+        
+        network.post(endpoint: "/create-signup", body: ["jwt": token, "username": username]) { [weak self] response in
+            guard let self = self,
+                  let data = response,
+                  let status = data["status"] as? String else {
+                DispatchQueue.main.async { completion?(.failed("Invalid response")) }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                let result = self.handleSignUpResponse(status: status)
+                completion?(result)
+            }
         }
     }
     
-    func saveUsername(username: String) {
-        UserDefaults.standard.set(username, forKey: usernameKey)
-        print("Saved username to UserDefaults: '\(username)'")
-    }
-    
-    func loadUsername() {
-        if let storedUsername = UserDefaults.standard.string(forKey: usernameKey) {
-            self.username = storedUsername
-            print("STORED USERNAME: '\(storedUsername)'")
-        } else {
-            print("No username found in UserDefaults")
+    private func handleSignUpResponse(status: String) -> SignUpResult {
+        switch status {
+        case "Account created successfully":
+            needsUser = false
+            authenticated = true
+            log("Account created successfully")
+            return .success
+            
+        case "User already exists":
+            log("User already exists")
+            return .userExists
+            
+        case "Username already exists":
+            log("Username already exists")
+            return .usernameExists
+            
+        default:
+            log("Sign up failed: \(status)")
+            return .failed(status)
         }
     }
     
-    // Method to update username (for settings screen)
+    // MARK: - Username Update
+    
     func updateUsername(_ newUsername: String, completion: @escaping (Bool) -> Void) {
-        guard let urlRequest = URL(string: url + "/update-username") else {
+        guard let token = jwt else {
             completion(false)
             return
         }
-        var request = URLRequest(url: urlRequest)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let data = try? JSONSerialization.data(withJSONObject: ["jwt": jwt ?? "", "username": newUsername])
-        request.httpBody = data
         
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data,
-                  let jsonData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let success = jsonData["success"] as? Bool else {
-                DispatchQueue.main.async {
-                    completion(false)
-                }
-                return
-            }
+        network.post(endpoint: "/update-username", body: ["jwt": token, "username": newUsername]) { [weak self] response in
+            let success = response?["success"] as? Bool ?? false
             
             DispatchQueue.main.async {
                 if success {
-                    self.username = newUsername
-                    completion(true)
-                } else {
-                    completion(false)
+                    self?.username = newUsername
                 }
+                completion(success)
             }
-        }.resume()
+        }
     }
     
-    // Optional: clear user data for logout
-    func clearUserData() {
-        self.jwt = nil
-        self.email = ""
-        self.username = ""
-        self.authenticated = false
-        self.needsUser = false
-        self.showOTPView = false
-        
-        UserDefaults.standard.removeObject(forKey: jwtKey)
-        UserDefaults.standard.removeObject(forKey: emailKey)
-        UserDefaults.standard.removeObject(forKey: usernameKey)
-        
-        print("Cleared all user data")
-    }
+    // MARK: - Logout
     
     func logout() {
-        print("🚪 Logging out user")
+        log("Logging out")
         
-        // Clear JWT from memory and storage
-        self.jwt = nil
-        UserDefaults.standard.removeObject(forKey: jwtKey)
+        // Clear all stored data
+        clearStorage()
         
-        // Reset authentication state
-        self.authenticated = false
-        self.needsUser = false
-        self.showOTPView = false
-        self.otp = ""
+        // Reset state
+        jwt = nil
+        email = ""
+        otp = ""
+        username = ""
+        authenticated = false
+        needsUser = false
+        showOTPView = false
         
-        print("✅ User logged out successfully")
+        log("Logout complete")
+    }
+    
+    // MARK: - Private Helpers
+    
+    private func setToken(_ token: String) {
+        jwt = token
+        authenticated = true
+        save(token, for: .jwt)
+    }
+    
+    // MARK: - Storage
+    
+    private func save(_ value: String?, for key: StorageKey) {
+        if let value = value {
+            storage.set(value, forKey: key.rawValue)
+        } else {
+            storage.removeObject(forKey: key.rawValue)
+        }
+    }
+    
+    private func load(_ key: StorageKey) -> String? {
+        storage.string(forKey: key.rawValue)
+    }
+    
+    private func clearStorage() {
+        StorageKey.allCases.forEach { key in
+            storage.removeObject(forKey: key.rawValue)
+        }
+    }
+    
+    // MARK: - Logging
+    
+    private func log(_ message: String) {
+        guard isLoggingEnabled else { return }
+        print("[UserAuth] \(message)")
     }
 }

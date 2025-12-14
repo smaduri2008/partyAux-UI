@@ -25,135 +25,226 @@ struct AddToPlaylistView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Song info header
-                VStack(spacing: 12) {
-                    // Song thumbnail
-                    if let imageUrlString = song["album_art"] as? String,
-                       let imageUrl = URL(string: imageUrlString) {
-                        AsyncImage(url: imageUrl) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            ProgressView()
-                        }
-                        .frame(width: 80, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .shadow(radius: 4)
-                    } else {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 80, height: 80)
-                            .overlay(
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(.white)
-                            )
-                    }
-                    
-                    // Song details
-                    VStack(spacing: 4) {
-                        Text(songTitle)
-                            .font(.headline)
-                            .foregroundColor(.textPrimary)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                        
-                        Text(songArtist)
-                            .font(.subheadline)
-                            .foregroundColor(.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.vertical, 20)
-                .padding(.horizontal)
+            ZStack {
+                // Premium background
+                Color.deepNavy
+                    .ignoresSafeArea()
                 
-                Divider()
-                    .background(Color.gray.opacity(0.3))
-                
-                // Playlists list
-                if playlistManager.userPlaylists.isEmpty {
-                    Spacer()
-                    VStack(spacing: 20) {
-                        Image(systemName: "music.note.list")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                        
-                        VStack(spacing: 8) {
-                            Text("No Playlists")
-                                .font(.headline)
-                                .foregroundColor(.textPrimary)
+                VStack(spacing: 0) {
+                    // Song info header
+                    VStack(spacing: 16) {
+                        // Song thumbnail with premium styling
+                        ZStack {
+                            // Glow effect
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.electricCyan)
+                                .frame(width: 90, height: 90)
+                                .blur(radius: 20)
+                                .opacity(0.3)
                             
-                            Text("Create a playlist to add this song to")
-                                .font(.subheadline)
-                                .foregroundColor(.textSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        
-                        Button("Create Playlist") {
-                            showingCreatePlaylist = true
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(LinearGradient(gradient: Gradient(colors: [.purple, .blue]), startPoint: .leading, endPoint: .trailing))
-                        .cornerRadius(8)
-                    }
-                    Spacer()
-                } else {
-                    List {
-                        Section {
-                            ForEach(playlistManager.userPlaylists, id: \.id) { playlist in
-                                PlaylistSelectionRow(
-                                    playlist: playlist,
-                                    isSelected: selectedPlaylists.contains(playlist.playlistId),
-                                    onToggle: { togglePlaylistSelection(playlist.playlistId) }
+                            if let imageUrlString = song["album_art"] as? String,
+                               let imageUrl = URL(string: imageUrlString) {
+                                AsyncImage(url: imageUrl) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } placeholder: {
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color.white.opacity(0.1))
+                                        .overlay(
+                                            ProgressView()
+                                                .tint(.electricCyan)
+                                        )
+                                }
+                                .frame(width: 80, height: 80)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
                                 )
-                                .listRowBackground(Color.black)
+                                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                            } else {
+                                RoundedRectangle(cornerRadius: 14)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.softPurple, .electricCyan.opacity(0.8)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 80, height: 80)
+                                    .overlay(
+                                        Image(systemName: "music.note")
+                                            .font(.system(size: 28))
+                                            .foregroundColor(.white)
+                                    )
                             }
-                        } header: {
-                            Text("Select playlists to add to:")
-                                .font(.subheadline)
-                                .foregroundColor(.textSecondary)
-                                .textCase(nil)
                         }
                         
-                        Section {
-                            Button(action: {
+                        // Song details
+                        VStack(spacing: 6) {
+                            Text(songTitle)
+                                .font(Font.premium(size: 18, weight: .bold))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                            
+                            Text(songArtist)
+                                .font(Font.premium(size: 14))
+                                .foregroundColor(.white.opacity(0.5))
+                                .multilineTextAlignment(.center)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.vertical, 24)
+                    .padding(.horizontal, 24)
+                    
+                    // Divider
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, .electricCyan.opacity(0.3), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 1)
+                    
+                    // Playlists list
+                    if playlistManager.userPlaylists.isEmpty {
+                        Spacer()
+                        VStack(spacing: 24) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.05))
+                                    .frame(width: 100, height: 100)
+                                
+                                Image(systemName: "music.note.list")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
+                            
+                            VStack(spacing: 8) {
+                                Text("No Playlists")
+                                    .font(Font.premium(size: 20, weight: .bold))
+                                    .foregroundColor(.white)
+                                
+                                Text("Create a playlist to add this song to")
+                                    .font(Font.premium(size: 14))
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .multilineTextAlignment(.center)
+                            }
+                            
+                            Button {
+                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                generator.impactOccurred()
                                 showingCreatePlaylist = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.purple)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 14, weight: .bold))
+                                        Text("Create Playlist")
+                                        .font(Font.premium(size: 15, weight: .semibold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 14)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.electricCyan, .softPurple],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .clipShape(Capsule())
+                                .shadow(color: .electricCyan.opacity(0.4), radius: 12, x: 0, y: 6)
+                            }
+                        }
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                // Section header
+                                HStack(spacing: 8) {
+                                    Image(systemName: "music.note.list")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.electricCyan)
                                     
-                                    Text("Create New Playlist")
-                                        .font(.headline)
-                                        .foregroundColor(.purple)
-                                    
-                                    Spacer()
+                                    Text("Select playlists to add to")
+                                        .font(Font.premium(size: 12, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.5))
+                                        .textCase(.uppercase)
+                                        .tracking(0.5)
+                                }
+                                .padding(.horizontal, 4)
+                                
+                                // Playlists
+                                VStack(spacing: 10) {
+                                    ForEach(playlistManager.userPlaylists, id: \.id) { playlist in
+                                        PlaylistSelectionRow(
+                                            playlist: playlist,
+                                            isSelected: selectedPlaylists.contains(playlist.playlistId),
+                                            onToggle: { togglePlaylistSelection(playlist.playlistId) }
+                                        )
+                                    }
+                                }
+                                
+                                // Create new playlist button
+                                Button(action: {
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.impactOccurred()
+                                    showingCreatePlaylist = true
+                                }) {
+                                    HStack(spacing: 12) {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(Color.electricCyan.opacity(0.15))
+                                                .frame(width: 44, height: 44)
+                                            
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.electricCyan)
+                                        }
+                                        
+                                        Text("Create New Playlist")
+                                            .font(Font.premium(size: 15, weight: .semibold))
+                                            .foregroundColor(.electricCyan)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .stroke(Color.electricCyan.opacity(0.3), lineWidth: 1)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 14)
+                                                    .fill(Color.electricCyan.opacity(0.05))
+                                            )
+                                    )
                                 }
                             }
-                            .listRowBackground(Color.black)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 20)
+                            .padding(.bottom, 40)
                         }
                     }
-                    .listStyle(GroupedListStyle())
                 }
             }
-            .background(Color.black.ignoresSafeArea())
             .navigationTitle("Add to Playlist")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.deepNavy, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .navigationBarItems(
                 leading: Button("Cancel") {
                     presentationMode.wrappedValue.dismiss()
                 }
-                .foregroundColor(.white),
+                    .font(Font.premium(size: 15, weight: .medium))
+                .foregroundColor(.white.opacity(0.7)),
                 trailing: Button("Add") {
                     addToSelectedPlaylists()
                 }
-                .foregroundColor(selectedPlaylists.isEmpty || isAdding ? .gray : .white)
+                .font(Font.premium(size: 15, weight: .semibold))
+                .foregroundColor(selectedPlaylists.isEmpty || isAdding ? .white.opacity(0.3) : .electricCyan)
                 .disabled(selectedPlaylists.isEmpty || isAdding)
             )
         }
@@ -166,6 +257,9 @@ struct AddToPlaylistView: View {
     }
     
     private func togglePlaylistSelection(_ playlistId: String) {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+        
         if selectedPlaylists.contains(playlistId) {
             selectedPlaylists.remove(playlistId)
         } else {
@@ -175,6 +269,9 @@ struct AddToPlaylistView: View {
     
     private func addToSelectedPlaylists() {
         guard !selectedPlaylists.isEmpty else { return }
+        
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
         
         isAdding = true
         let totalPlaylists = selectedPlaylists.count
@@ -191,7 +288,10 @@ struct AddToPlaylistView: View {
                 if completedCount == totalPlaylists {
                     isAdding = false
                     if !hasError {
+                        generator.notificationOccurred(.success)
                         presentationMode.wrappedValue.dismiss()
+                    } else {
+                        generator.notificationOccurred(.error)
                     }
                 }
             }
@@ -206,12 +306,22 @@ struct PlaylistSelectionRow: View {
     
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 12) {
-                // Playlist icon
+            HStack(spacing: 14) {
+                // Playlist icon with gradient
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(LinearGradient(gradient: Gradient(colors: [.purple.opacity(0.6), .blue.opacity(0.6)]), startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 40, height: 40)
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(
+                            LinearGradient(
+                                colors: [.softPurple, .electricCyan.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
                     
                     Image(systemName: "music.note.list")
                         .font(.system(size: 16))
@@ -219,24 +329,45 @@ struct PlaylistSelectionRow: View {
                 }
                 
                 // Playlist info
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(playlist.name)
-                        .font(.headline)
-                        .foregroundColor(.textPrimary)
+                        .font(Font.premium(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
                         .lineLimit(1)
                     
                     Text("\(playlist.songs.count) songs")
-                        .font(.subheadline)
-                        .foregroundColor(.textSecondary)
+                        .font(Font.premium(size: 12))
+                        .foregroundColor(.white.opacity(0.5))
                 }
                 
                 Spacer()
                 
                 // Selection indicator
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
-                    .foregroundColor(isSelected ? .green : .gray)
+                ZStack {
+                    Circle()
+                        .stroke(isSelected ? Color.green : Color.white.opacity(0.2), lineWidth: 2)
+                        .frame(width: 24, height: 24)
+                    
+                    if isSelected {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 24, height: 24)
+                        
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
             }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.white.opacity(isSelected ? 0.08 : 0.05))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(isSelected ? Color.green.opacity(0.3) : Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
         }
         .buttonStyle(PlainButtonStyle())
     }

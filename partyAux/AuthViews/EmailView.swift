@@ -13,92 +13,124 @@ struct EmailView: View {
     @State private var showError = false
     @State private var isEmailValid = false
     @FocusState private var isEmailFocused: Bool
+    @State private var animateGlow = false
 
     var body: some View {
-        ZStack {
-            LinearGradient.backgroundGradient
+        GeometryReader { geometry in
+            ZStack {
+            // Background with gradient
+            Color.appBackground
                 .ignoresSafeArea()
+            
+            // Animated glow effect
+            // Animated glow effect sized relative to device width so it doesn't overflow smaller screens
+            Circle()
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            .brandPrimary.opacity(0.3),
+                            .brandSecondary.opacity(0.1),
+                            .clear
+                        ]),
+                        center: .center,
+                        startRadius: 50,
+                        endRadius: 300
+                    )
+                )
+                // Keep background glow circle within screen to prevent horizontal overflow
+                .frame(width: min(geometry.size.width * 0.9, 500), height: min(geometry.size.width * 0.9, 500))
+                .offset(x: 0, y: -min(geometry.size.height * 0.22, 220))
+                .scaleEffect(animateGlow ? 1.2 : 1.0)
+                .opacity(animateGlow ? 0.8 : 0.6)
+                .animation(
+                    Animation.easeInOut(duration: 4).repeatForever(autoreverses: true),
+                    value: animateGlow
+                )
 
-            ScrollView {
-                VStack(spacing: 40) {
-                    Spacer(minLength: 60)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: Spacing.lg) {
+                    Spacer(minLength: max(geometry.size.height * 0.06, 48))
+                    
+                    // Logo/Icon (uses bundled `PartyAux_transparent` PNG if available; otherwise the fallback circle icon)
+                    LogoView(size: min(geometry.size.width * 0.28, 120), hasBackground: false)
                     
                     // Hero Section
-                    VStack(spacing: 16) {
+                    VStack(spacing: Spacing.sm) {
                         Text("Welcome to")
-                            .font(.title3)
+                            .font(.bodyLarge)
                             .foregroundColor(.textSecondary)
-                            .opacity(0.8)
                         
                         Text("PartyAux")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.textPrimary)
-                    }
-                    .animation(.smooth.delay(0.2), value: true)
-                    
-                    // Subtitle
-                    VStack(spacing: 8) {
-                        Text("Share music, create memories")
-                            .font(.headline)
-                            .foregroundColor(.textSecondary)
-                            .multilineTextAlignment(.center)
+                            .font(.displaySmall)
+                            .foregroundColor(.brandSecondary)
                         
-                        Text("Enter your email to get started")
-                            .font(.subheadline)
+                        Text("Share music, create memories")
+                            .font(.bodyMedium)
                             .foregroundColor(.textTertiary)
-                            .multilineTextAlignment(.center)
+                            .padding(.top, Spacing.xs)
                     }
-                    .animation(.smooth.delay(0.4), value: true)
                     
                     // Email Input Section
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
+                    VStack(spacing: Spacing.lg) {
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            HStack(spacing: Spacing.xs) {
                                 Image(systemName: "envelope.fill")
-                                    .foregroundColor(.appPrimary)
-                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundStyle(LinearGradient.brandGradient)
+                                    .font(.system(size: 14, weight: .medium))
                                 
                                 Text("Email Address")
-                                    .font(.callout)
+                                    .font(.labelLarge)
                                     .foregroundColor(.textSecondary)
-                                    .fontWeight(.medium)
                             }
                             
-                            TextField("Enter your email", text: $auth.email)
-                                .textFieldStyle(ModernTextFieldStyle())
-                                .keyboardType(.emailAddress)
-                                .textContentType(.emailAddress)
-                                .autocapitalization(.none)
-                                .focused($isEmailFocused)
-                                .onChange(of: auth.email) { newValue in
-                                    withAnimation(.smooth) {
-                                        isEmailValid = isValidEmail(newValue)
-                                        showError = false
+                            HStack {
+                                TextField("", text: $auth.email)
+                                    .placeholder(when: auth.email.isEmpty) {
+                                        Text("Enter your email")
+                                            .foregroundColor(.textMuted)
                                     }
+                                    .font(.bodyLarge)
+                                    .foregroundColor(.textPrimary)
+                                    .keyboardType(.emailAddress)
+                                    .textContentType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .focused($isEmailFocused)
+                                    .onChange(of: auth.email) { newValue in
+                                        withAnimation(.smooth) {
+                                            isEmailValid = isValidEmail(newValue)
+                                            showError = false
+                                        }
+                                    }
+                                
+                                if isEmailValid {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.success)
+                                        .transition(.scale.combined(with: .opacity))
                                 }
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(
-                                            isEmailFocused ? LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing) : 
-                                            LinearGradient(gradient: Gradient(colors: [Color.clear]), startPoint: .leading, endPoint: .trailing),
-                                            lineWidth: isEmailFocused ? 2 : 1
-                                        )
-                                        .animation(.smooth, value: isEmailFocused)
-                                )
+                            }
+                            .padding(Spacing.md)
+                            .background(Color.appElevated)
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                                    .strokeBorder(
+                                        isEmailFocused ? LinearGradient.brandGradient : LinearGradient(colors: [.textMuted.opacity(0.3)], startPoint: .leading, endPoint: .trailing),
+                                        lineWidth: isEmailFocused ? 2 : 1
+                                    )
+                            )
+                            .animation(.smooth, value: isEmailFocused)
                             
                             if showError {
-                                HStack {
+                                HStack(spacing: Spacing.xxs) {
                                     Image(systemName: "exclamationmark.circle.fill")
-                                        .foregroundColor(.red)
-                                        .font(.caption)
+                                        .foregroundColor(.error)
+                                        .font(.labelSmall)
                                     
                                     Text("Please enter a valid email address")
-                                        .font(.caption)
-                                        .foregroundColor(.red)
+                                        .font(.labelSmall)
+                                        .foregroundColor(.error)
                                 }
                                 .transition(.move(edge: .top).combined(with: .opacity))
-                                .animation(.bouncy, value: showError)
                             }
                         }
                         
@@ -108,7 +140,6 @@ struct EmailView: View {
                                 isLoading = true
                                 isEmailFocused = false
                                 
-                                // Add haptic feedback
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                 impactFeedback.impactOccurred()
                                 
@@ -122,55 +153,47 @@ struct EmailView: View {
                                 withAnimation(.bouncy) {
                                     showError = true
                                 }
+                                let notificationFeedback = UINotificationFeedbackGenerator()
+                                notificationFeedback.notificationOccurred(.error)
                             }
                         }) {
-                            HStack {
+                            HStack(spacing: Spacing.sm) {
                                 if isLoading {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                     Text("Sending...")
-                                        .font(.headline)
+                                        .font(.titleSmall)
                                 } else {
                                     Image(systemName: "paperplane.fill")
                                         .font(.system(size: 16, weight: .medium))
-                                    Text("Send OTP")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
+                                    Text("Continue")
+                                        .font(.titleSmall)
                                 }
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, Spacing.md)
                             .background(
-                                Group {
-                                    if isEmailValid && !isLoading {
-                                        LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing)
-                                    } else {
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.gray.opacity(0.3)]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    }
-                                }
+                                isEmailValid && !isLoading
+                                    ? LinearGradient.brandGradient
+                                    : LinearGradient(colors: [.appElevated], startPoint: .leading, endPoint: .trailing)
                             )
-                            .foregroundColor(isEmailValid && !isLoading ? .black : .textTertiary)
-                            .cornerRadius(12)
+                            .foregroundColor(isEmailValid && !isLoading ? .white : .textTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
                             .shadow(
-                                color: isEmailValid ? Color.white.opacity(0.3) : Color.clear,
-                                radius: 8,
+                                color: isEmailValid && !isLoading ? .brandPrimary.opacity(0.4) : .clear,
+                                radius: 12,
                                 x: 0,
-                                y: 4
+                                y: 6
                             )
-                            .scaleEffect(isLoading ? 0.98 : 1.0)
-                            .animation(.bouncy, value: isLoading)
                         }
                         .disabled(isLoading)
+                        .scaleEffect(isLoading ? 0.98 : 1.0)
+                        .animation(.snappy, value: isLoading)
                     }
-                    .padding(.horizontal, 24)
-                    .animation(.smooth.delay(0.6), value: true)
+                    .padding(.horizontal, Spacing.lg)
                     
-                    Spacer(minLength: 40)
+                    Spacer(minLength: max(geometry.size.height * 0.06, 48))
                 }
                 .padding()
             }
@@ -180,7 +203,9 @@ struct EmailView: View {
                 EmptyView()
             }
             .hidden()
+            }
         }
+        .onAppear { animateGlow = true }
         .onTapGesture {
             isEmailFocused = false
         }

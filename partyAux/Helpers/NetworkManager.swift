@@ -15,7 +15,7 @@ class NetworkManager {
     
     // MARK: - Properties
     private let session: URLSession
-    private let baseURL = "https://api.partyaux.party"
+    let baseURL = "https://api.partyaux.party"
     
     // MARK: - Initialization
     private init() {

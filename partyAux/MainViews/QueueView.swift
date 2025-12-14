@@ -8,45 +8,35 @@ struct QueueView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row - Removed refresh button
+            // Header
             HStack {
-                Text("Current Queue")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text("Queue")
+                        .font(.headlineLarge)
+                        .foregroundColor(.textPrimary)
+                    Text("\(queueManager.queue.count) songs")
+                        .font(.labelMedium)
+                        .foregroundColor(.textSecondary)
+                }
                 Spacer()
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.sm)
+            .padding(.bottom, Spacing.md)
 
             // Content based on queue state
             if queueManager.queue.isEmpty && !isRefreshing {
                 EmptyQueueView(showSearchView: $showSearchView)
             } else if queueManager.queueOrder.isEmpty && !queueManager.queue.isEmpty {
-                // Handle case where queue has data but order is missing
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 60))
-                        .foregroundColor(.orange)
-
-                    Text("Queue data error")
-                        .font(.title2)
-                        .foregroundColor(.gray)
-
-                    Text("Please refresh to reload the queue")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
+                ErrorStateView()
             } else {
                 QueueViewWithLikeDislike()
                     .environmentObject(queueManager)
                     .environmentObject(roomManager)
             }
         }
-        .background(LinearGradient.backgroundGradient.ignoresSafeArea())
+        .background(Color.appBackground.ignoresSafeArea())
         .onAppear {
-            // Only fetch queue if it's empty
             if queueManager.queue.isEmpty {
                 queueManager.fetchQueue {
                     print("Queue loaded: \(queueManager.queue.count) songs")
@@ -64,59 +54,89 @@ struct QueueView: View {
     }
 }
 
+// MARK: - Error State View
+struct ErrorStateView: View {
+    var body: some View {
+        VStack(spacing: Spacing.lg) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.warning.opacity(0.1))
+                    .frame(width: 120, height: 120)
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundColor(.warning)
+            }
+            
+            VStack(spacing: Spacing.xs) {
+                Text("Queue data error")
+                    .font(.titleMedium)
+                    .foregroundColor(.textPrimary)
+                Text("Pull down to refresh the queue")
+                    .font(.bodyMedium)
+                    .foregroundColor(.textTertiary)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, Spacing.xl)
+    }
+}
+
 // MARK: - Empty Queue View
 struct EmptyQueueView: View {
     @Binding var showSearchView: Bool
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Spacing.xl) {
             Spacer()
             
-            Image(systemName: "music.note.list")
-                .font(.system(size: 80))
-                .foregroundColor(.gray.opacity(0.6))
+            ZStack {
+                Circle()
+                    .fill(LinearGradient.brandGradient.opacity(0.1))
+                    .frame(width: 140, height: 140)
+                Circle()
+                    .fill(LinearGradient.brandGradient.opacity(0.2))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundStyle(LinearGradient.brandGradient)
+            }
 
-            VStack(spacing: 12) {
+            VStack(spacing: Spacing.sm) {
                 Text("No songs in queue")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.gray)
+                    .font(.headlineSmall)
+                    .foregroundColor(.textPrimary)
 
                 Text("Add some songs to get the party started!")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.bodyMedium)
+                    .foregroundColor(.textSecondary)
                     .multilineTextAlignment(.center)
             }
             
-            // Add songs button - Now navigates to search view
             Button(action: {
-                // Add haptic feedback
                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                 impactFeedback.impactOccurred()
-                
                 showSearchView = true
             }) {
-                HStack {
+                HStack(spacing: Spacing.sm) {
                     Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 18, weight: .medium))
                     Text("Add Songs")
+                        .font(.titleSmall)
                 }
-                .font(.callout)
-                .fontWeight(.medium)
                 .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(LinearGradient(
-                    gradient: Gradient(colors: [Color.purple, Color.blue]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                ))
-                .cornerRadius(25)
-                .shadow(color: Color.purple.opacity(0.3), radius: 8, x: 0, y: 4)
+                .padding(.horizontal, Spacing.lg)
+                .padding(.vertical, Spacing.md)
+                .background(LinearGradient.brandGradient)
+                .clipShape(Capsule())
+                .shadow(color: .brandPrimary.opacity(0.4), radius: 12, x: 0, y: 6)
             }
             
             Spacer()
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, Spacing.xl)
     }
 }
 
@@ -240,7 +260,6 @@ struct QueueSongRowWithLikeDislike: View {
     let onDislike: () -> Void
     let onLongPress: (() -> Void)?
     
-    // Cache song properties for better performance
     private var songTitle: String {
         song["title"] as? String ?? "Unknown Title"
     }
@@ -265,102 +284,105 @@ struct QueueSongRowWithLikeDislike: View {
     }
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.sm) {
             // Song Index
             Text("\(index + 1)")
-                .font(.caption)
-                .fontWeight(.bold)
+                .font(.labelMedium)
                 .foregroundColor(.textTertiary)
-                .frame(width: 20)
+                .frame(width: 24)
             
             // Album Art Thumbnail
             Group {
                 if let url = albumArtURL {
                     JFIFImageView(imageUrl: url)
-                        .frame(width: 50, height: 50)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.small, style: .continuous))
                 } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.appCardBackground)
-                        .frame(width: 50, height: 50)
+                    RoundedRectangle(cornerRadius: CornerRadius.small, style: .continuous)
+                        .fill(Color.appElevated)
+                        .frame(width: 52, height: 52)
                         .overlay(
                             Image(systemName: "music.note")
-                                .font(.system(size: 16))
+                                .font(.system(size: 18))
                                 .foregroundColor(.textTertiary)
                         )
                 }
             }
             .overlay(
-                // Add removal warning overlay
                 isMarkedForRemoval ?
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.red.opacity(0.3))
+                RoundedRectangle(cornerRadius: CornerRadius.small, style: .continuous)
+                    .fill(Color.error.opacity(0.4))
                     .overlay(
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 14))
                             .foregroundColor(.white)
                     ) : nil
             )
             
             // Song Info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(songTitle)
-                    .font(.callout)
-                    .fontWeight(.medium)
+                    .font(.titleSmall)
                     .foregroundColor(isMarkedForRemoval ? .textSecondary : .textPrimary)
                     .lineLimit(1)
                 
                 Text(songArtist)
-                    .font(.caption)
+                    .font(.bodySmall)
                     .foregroundColor(.textSecondary)
                     .lineLimit(1)
                 
-                // Added by text
-                Text("Added by \(addedBy)")
-                    .font(.caption2)
-                    .foregroundColor(.textTertiary)
-                    .lineLimit(1)
+                HStack(spacing: Spacing.xxs) {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 10))
+                    Text(addedBy)
+                        .font(.labelSmall)
+                }
+                .foregroundColor(.textTertiary)
             }
             
             Spacer()
             
             // Downvote section
-            VStack(spacing: 4) {
-                // Dislike Button
+            VStack(spacing: Spacing.xxs) {
                 Button(action: {
                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                     impactFeedback.impactOccurred()
                     onDislike()
                 }) {
-                    Image(systemName: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(isDisliked ? .red : .textTertiary)
-                        .scaleEffect(isDisliked ? 1.1 : 1.0)
-                        .animation(.bouncy(duration: 0.3), value: isDisliked)
+                    ZStack {
+                        Circle()
+                            .fill(isDisliked ? Color.error.opacity(0.2) : Color.appElevated)
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(isDisliked ? Color.error.opacity(0.5) : Color.textMuted.opacity(0.2), lineWidth: 1)
+                            )
+                        
+                        Image(systemName: isDisliked ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(isDisliked ? .error : .textSecondary)
+                    }
                 }
-                .frame(width: 36, height: 36)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(18)
                 .disabled(isDisliked)
-                .opacity(isDisliked ? 0.6 : 1.0)
+                .scaleEffect(isDisliked ? 1.05 : 1.0)
+                .animation(.bouncy, value: isDisliked)
                 
-                // Downvote progress indicator
                 DownvoteProgressView(current: downvotes, max: maxDownvotes)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.appCardBackground.opacity(isMarkedForRemoval ? 0.4 : 0.8))
-        )
+        .padding(Spacing.sm)
+        .background(Color.appCardBackground.opacity(isMarkedForRemoval ? 0.5 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isMarkedForRemoval ? Color.red : Color.appSurface, lineWidth: isMarkedForRemoval ? 2 : 1)
+            RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                .strokeBorder(
+                    isMarkedForRemoval ? Color.error.opacity(0.5) : Color.textMuted.opacity(0.1),
+                    lineWidth: isMarkedForRemoval ? 2 : 1
+                )
         )
-        .opacity(isMarkedForRemoval ? 0.6 : 1.0)
+        .opacity(isMarkedForRemoval ? 0.7 : 1.0)
         .scaleEffect(isMarkedForRemoval ? 0.98 : 1.0)
-        .animation(.easeInOut(duration: 0.3), value: isMarkedForRemoval)
+        .animation(.smooth, value: isMarkedForRemoval)
         .contentShape(Rectangle())
         .onLongPressGesture {
             if let onLongPress = onLongPress {
@@ -488,11 +510,11 @@ struct DownvoteProgressView: View {
     private var progressColor: Color {
         switch progress {
         case 0..<0.5:
-            return .gray
+            return .brandPrimary
         case 0.5..<0.8:
-            return .orange
+            return .warning
         default:
-            return .red
+            return .error
         }
     }
     
@@ -502,40 +524,32 @@ struct DownvoteProgressView: View {
     
     var body: some View {
         VStack(spacing: 2) {
-            // Progress circle
             ZStack {
-                // Background circle
                 Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 2)
-                    .frame(width: 24, height: 24)
+                    .stroke(Color.appElevated, lineWidth: 2.5)
+                    .frame(width: 28, height: 28)
                 
-                // Progress circle
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
                         progressColor,
-                        style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                     )
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
                     .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.3), value: progress)
+                    .animation(.smooth, value: progress)
                 
-                // Danger indicator when close to max
                 if isDangerous {
                     Image(systemName: "exclamationmark")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(progressColor)
-                        .scaleEffect(isDangerous ? 1.0 : 0.8)
-                        .animation(.bouncy(duration: 0.4), value: isDangerous)
                 }
             }
             
-            // Count text
             Text("\(current)/\(max)")
-                .font(.caption2)
+                .font(.labelSmall)
                 .foregroundColor(progressColor)
-                .fontWeight(.medium)
-                .animation(.easeInOut(duration: 0.2), value: progressColor)
+                .monospacedDigit()
         }
     }
 }
@@ -546,51 +560,52 @@ struct DownvoteThresholdIndicator: View {
     @State private var isAnimating = false
     
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "hand.thumbsdown.circle.fill")
-                .font(.title2)
-                .foregroundColor(.red)
-                .scaleEffect(isAnimating ? 1.1 : 1.0)
-                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isAnimating)
+        HStack(spacing: Spacing.sm) {
+            ZStack {
+                Circle()
+                    .fill(Color.error.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "hand.thumbsdown.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.error)
+                    .scaleEffect(isAnimating ? 1.1 : 1.0)
+            }
             
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Downvote Threshold")
-                    .font(.caption)
-                    .fontWeight(.medium)
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text("Skip Threshold")
+                    .font(.labelLarge)
                     .foregroundColor(.textPrimary)
                 
-                Text("Songs are removed after \(maxDownvotes) downvotes")
-                    .font(.caption2)
+                Text("Songs skip after \(maxDownvotes) votes")
+                    .font(.labelSmall)
                     .foregroundColor(.textSecondary)
             }
             
             Spacer()
             
-            // Threshold visualization
-            HStack(spacing: 4) {
-                ForEach(0..<maxDownvotes, id: \.self) { index in
+            HStack(spacing: 3) {
+                ForEach(0..<maxDownvotes, id: \.self) { _ in
                     Circle()
-                        .fill(Color.red.opacity(0.3))
+                        .fill(Color.error.opacity(0.4))
                         .frame(width: 8, height: 8)
                         .overlay(
                             Circle()
-                                .stroke(Color.red, lineWidth: 1)
+                                .strokeBorder(Color.error, lineWidth: 1)
                         )
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.red.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                )
+        .padding(Spacing.md)
+        .background(Color.appCardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                .strokeBorder(Color.error.opacity(0.2), lineWidth: 1)
         )
         .onAppear {
-            isAnimating = true
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                isAnimating = true
+            }
         }
     }
 }

@@ -17,68 +17,39 @@ struct OTPView: View {
     
     var body: some View {
         ZStack {
-            LinearGradient.backgroundGradient
+            Color.appBackground
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 40) {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: Spacing.xl) {
                     Spacer(minLength: 40)
                     
                     // Header Section
-                    VStack(spacing: 20) {
-                        // Back Button
-                        HStack {
-                            Button(action: {
-                                // Add haptic feedback
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                                impactFeedback.impactOccurred()
-                                
-                                // Navigate back - this will be handled by NavigationView
-                            }) {
-                                HStack {
-                                    Image(systemName: "chevron.left")
-                                        .font(.system(size: 18, weight: .medium))
-                                    Text("Back")
-                                        .font(.callout)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(20)
-                            }
-                            Spacer()
-                        }
+                    VStack(spacing: Spacing.lg) {
+                        // Icon
+                        LogoView(size: 88, hasBackground: false)
                         
                         // Title and subtitle
-                        VStack(spacing: 12) {
-                            Image(systemName: "envelope.badge.fill")
-                                .font(.system(size: 48))
-                                .foregroundColor(.white)
-                            
+                        VStack(spacing: Spacing.sm) {
                             Text("Verification Code")
-                                .font(.title2)
-                                .fontWeight(.bold)
+                                .font(.headlineMedium)
                                 .foregroundColor(.textPrimary)
                             
-                            VStack(spacing: 4) {
+                            VStack(spacing: Spacing.xxs) {
                                 Text("Enter the 6-digit code sent to")
-                                    .font(.callout)
+                                    .font(.bodyMedium)
                                     .foregroundColor(.textSecondary)
                                 
                                 Text(auth.email)
-                                    .font(.callout)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
+                                    .font(.bodyMedium)
+                                    .foregroundStyle(LinearGradient.brandGradient)
                             }
                             .multilineTextAlignment(.center)
                         }
                     }
-                    .animation(.smooth.delay(0.2), value: true)
                     
                     // OTP Input Section
-                    VStack(spacing: 24) {
+                    VStack(spacing: Spacing.lg) {
                         ZStack {
                             // Hidden TextField for input
                             TextField("", text: $auth.otp)
@@ -93,7 +64,7 @@ struct OTPView: View {
                                 }
                             
                             // Visual OTP boxes
-                            HStack(spacing: 12) {
+                            HStack(spacing: Spacing.sm) {
                                 ForEach(0..<otpLength, id: \.self) { index in
                                     OTPDigitView(
                                         digit: auth.otp.digits[safe: index] ?? "",
@@ -107,98 +78,77 @@ struct OTPView: View {
                         .onTapGesture {
                             isTextFieldFocused = true
                         }
-                        .animation(.smooth.delay(0.4), value: true)
                         
                         // Error message
                         if showError {
-                            HStack {
+                            HStack(spacing: Spacing.xxs) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
-                                    .font(.caption)
+                                    .foregroundColor(.error)
+                                    .font(.labelSmall)
                                 
                                 Text("Invalid verification code. Please try again.")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
+                                    .font(.labelSmall)
+                                    .foregroundColor(.error)
                             }
                             .transition(.move(edge: .top).combined(with: .opacity))
-                            .animation(.bouncy, value: showError)
                         }
                         
                         // Login Button
                         Button(action: {
                             login()
                         }) {
-                            HStack {
+                            HStack(spacing: Spacing.sm) {
                                 if isLoading {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                     Text("Verifying...")
-                                        .font(.headline)
+                                        .font(.titleSmall)
                                 } else {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 16, weight: .medium))
                                     Text("Verify Code")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
+                                        .font(.titleSmall)
                                 }
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, Spacing.md)
                             .background(
-                                Group {
-                                    if auth.otp.count == otpLength && !isLoading {
-                                        LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing)
-                                    } else {
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [Color.gray.opacity(0.3)]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    }
-                                }
+                                auth.otp.count == otpLength && !isLoading
+                                    ? LinearGradient.brandGradient
+                                    : LinearGradient(colors: [.appElevated], startPoint: .leading, endPoint: .trailing)
                             )
-                            .foregroundColor(auth.otp.count == otpLength && !isLoading ? .black : .textTertiary)
-                            .cornerRadius(12)
+                            .foregroundColor(auth.otp.count == otpLength && !isLoading ? .white : .textTertiary)
+                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous))
                             .shadow(
-                                color: auth.otp.count == otpLength ? Color.white.opacity(0.3) : Color.clear,
-                                radius: 8,
+                                color: auth.otp.count == otpLength ? .brandPrimary.opacity(0.4) : .clear,
+                                radius: 12,
                                 x: 0,
-                                y: 4
+                                y: 6
                             )
-                            .scaleEffect(isLoading ? 0.98 : 1.0)
-                            .animation(.bouncy, value: isLoading)
                         }
                         .disabled(auth.otp.count != otpLength || isLoading)
+                        .scaleEffect(isLoading ? 0.98 : 1.0)
+                        .animation(.snappy, value: isLoading)
                         
                         // Resend Code Section
-                        VStack(spacing: 8) {
+                        VStack(spacing: Spacing.xs) {
                             Text("Didn't receive the code?")
-                                .font(.footnote)
+                                .font(.labelMedium)
                                 .foregroundColor(.textTertiary)
                             
                             Button(action: {
-                                // Add haptic feedback
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                 impactFeedback.impactOccurred()
-                                
                                 auth.sendOTP()
-                                
-                                // Show success feedback
-                                withAnimation(.bouncy) {
-                                    // Add some visual feedback here if needed
-                                }
                             }) {
                                 Text("Resend Code")
-                                    .font(.footnote)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                                    .underline()
+                                    .font(.labelLarge)
+                                    .foregroundStyle(LinearGradient.brandGradient)
                             }
                         }
-                        .animation(.smooth.delay(0.6), value: true)
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, Spacing.lg)
                     
                     Spacer(minLength: 40)
                 }
@@ -251,17 +201,14 @@ struct OTPView: View {
         isLoading = true
         isTextFieldFocused = false
         
-        // Add haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
         auth.login()
         
-        // Simulate loading time (remove this in production)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             isLoading = false
             
-            // Show error if login failed (add proper error handling here)
             if !auth.authenticated {
                 withAnimation(.bouncy) {
                     showError = true
@@ -279,38 +226,31 @@ struct OTPDigitView: View {
     
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(
-                    isFilled ? Color.white.opacity(0.1) : Color.appCardBackground
-                )
+            RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                .fill(isFilled ? Color.brandPrimary.opacity(0.1) : Color.appElevated)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(
-                            isActive ? LinearGradient(gradient: Gradient(colors: [Color.white]), startPoint: .leading, endPoint: .trailing) : 
-                            LinearGradient(
-                                gradient: Gradient(colors: [isFilled ? Color.white : Color.appSurface]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
+                    RoundedRectangle(cornerRadius: CornerRadius.medium, style: .continuous)
+                        .strokeBorder(
+                            isActive ? LinearGradient.brandGradient :
+                            isFilled ? LinearGradient(colors: [.brandPrimary.opacity(0.5)], startPoint: .leading, endPoint: .trailing) :
+                            LinearGradient(colors: [.textMuted.opacity(0.3)], startPoint: .leading, endPoint: .trailing),
                             lineWidth: isActive ? 2 : 1
                         )
                 )
-                .frame(width: 45, height: 55)
+                .frame(width: 48, height: 58)
                 .scaleEffect(bounce ? 1.1 : 1.0)
                 .animation(.bouncy, value: bounce)
             
             Text(digit)
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundColor(isFilled ? .white : .textSecondary)
+                .font(.headlineSmall)
+                .foregroundColor(isFilled ? .brandPrimary : .textSecondary)
             
             // Cursor animation
             if isActive && digit.isEmpty {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.white)
-                    .frame(width: 2, height: 20)
+                    .fill(LinearGradient.brandGradient)
+                    .frame(width: 2, height: 24)
                     .opacity(0.8)
-                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: true)
             }
         }
     }
